@@ -1,6 +1,7 @@
 import{useState,useRef,useEffect,useCallback}from"react";
 const F=[{id:"carre",label:"Carré",emoji:"⬜"},{id:"rectangle",label:"Rectangle",emoji:"▬"},{id:"triangle",label:"Triangle",emoji:"🔺"},{id:"U",label:"U",emoji:"⊓"},{id:"L",label:"L",emoji:"⌐"}];
 const CHAMPS={carre:[{k:"cote",l:"Côté (m)"}],rectangle:[{k:"lon",l:"Longueur"},{k:"lar",l:"Largeur"}],triangle:[{k:"base",l:"Base"},{k:"haut",l:"Hauteur"}],L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"w1",l:"Larg.1"},{k:"w2",l:"Larg.2"}],U:[{k:"lt",l:"Larg.tot"},{k:"ht",l:"Haut.tot"},{k:"ep",l:"Épais."}]};
+const CW=340,CH=320,PAD=52,BASE_GS=40;
 
 function getRealSize(f,d){
   const n=k=>Number(d[k]||1);
@@ -24,60 +25,76 @@ function getPts(f,d,ox,oy,sc){
 
 function PlanCanvas({forme,dims,onDimTap}){
   const cvRef=useRef();
+  const zoom=useRef(1);
+  const pan=useRef({x:0,y:0});
+  const drag=useRef(false);
+  const lastT=useRef(null);
+  const pinch=useRef(null);
   const hitZones=useRef([]);
-  const CW=340,CH=320,PAD=48;
 
   const draw=useCallback(()=>{
     const cv=cvRef.current;if(!cv)return;
     const ctx=cv.getContext("2d");
     ctx.clearRect(0,0,CW,CH);
 
+    const z=zoom.current;
+    const px=pan.current.x;
+    const py=pan.current.y;
+
     // Fond fixe
-    ctx.fillStyle="#f5f0e8";ctx.fillRect(0,0,CW,CH);
+    ctx.fillStyle="#f5f0e8";
+    ctx.fillRect(0,0,CW,CH);
 
-    // Grille fixe (toujours pareille)
-    const gs=40;
-    ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
-    for(let x=0;x<CW;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
-    for(let y=0;y<CH;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
-    ctx.strokeStyle="#ccc8bc";ctx.lineWidth=1.2;
-    for(let x=0;x<CW;x+=gs*5){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
-    for(let y=0;y<CH;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
-
-    // Calcul échelle AUTO pour que le plan rentre toujours
+    // Grille qui bouge AVEC le plan (même référentiel)
+    const gs=BASE_GS*z;
+    // Point d'origine de la grille = coin haut-gauche du plan dans le monde
     const rs=getRealSize(forme,dims);
-    const sc=Math.min((CW-PAD*2)/rs.w,(CH-PAD*2)/rs.h);
-    const pw=rs.w*sc,ph=rs.h*sc;
-    const ox=(CW-pw)/2,oy=(CH-ph)/2;
+    const sc0=Math.min((CW-PAD*2)/rs.w,(CH-PAD*2)/rs.h);
+    const sc=sc0*z;
+    const planW=rs.w*sc,planH=rs.h*sc;
+    const planX=CW/2-planW/2+px;
+    const planY=CH/2-planH/2+py;
+    // Origine grille alignée sur coin plan
+    const gox=((planX%gs)+gs)%gs;
+    const goy=((planY%gs)+gs)%gs;
 
+    ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
+    for(let x=gox-gs;x<CW+gs;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
+    for(let y=goy-gs;y<CH+gs;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
+    ctx.strokeStyle="#ccc8bc";ctx.lineWidth=1.2;
+    for(let x=gox-gs*5;x<CW+gs*5;x+=gs*5){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
+    for(let y=goy-gs*5;y<CH+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
+
+    // Plan ancré sur la grille
+    const ox=planX,oy=planY;
     const pts=getPts(forme,dims,ox,oy,sc);
     if(!pts.length)return;
 
-    // Ombre
     ctx.shadowColor="rgba(0,0,0,0.12)";ctx.shadowBlur=6;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;
     ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
     ctx.closePath();
     ctx.fillStyle="rgba(255,252,235,0.97)";ctx.fill();
     ctx.shadowColor="transparent";ctx.shadowBlur=0;
-
-    // Murs
     ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
     ctx.closePath();
     ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
 
-    // Cotes cliquables
+    // Cotes
     hitZones.current=[];
     ctx.font="bold 11px sans-serif";ctx.textAlign="center";
 
     const drawCote=(x1,y1,x2,y2,label,key)=>{
       ctx.setLineDash([5,3]);ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+      ctx.setLineDash([]);
       const mx=(x1+x2)/2,my=(y1+y2)/2;
       const tw=Math.max(label.length*7+12,36),th=18;
       ctx.fillStyle="#fff";ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1.5;
-      ctx.beginPath();ctx.roundRect?ctx.roundRect(mx-tw/2,my-th/2,tw,th,5):ctx.rect(mx-tw/2,my-th/2,tw,th);
+      ctx.beginPath();
+      if(ctx.roundRect)ctx.roundRect(mx-tw/2,my-th/2,tw,th,5);
+      else ctx.rect(mx-tw/2,my-th/2,tw,th);
       ctx.fill();ctx.stroke();
       ctx.fillStyle="#2a7fd4";ctx.fillText(label,mx,my+4);
       hitZones.current.push({x:mx-tw/2,y:my-th/2,w:tw,h:th,key});
@@ -85,27 +102,27 @@ function PlanCanvas({forme,dims,onDimTap}){
 
     if(forme==="carre"){
       const s=Number(dims.cote||1)*sc;
-      drawCote(ox,oy-20,ox+s,oy-20,dims.cote+"m","cote");
-      drawCote(ox+s+20,oy,ox+s+20,oy+s,dims.cote+"m","cote");
+      drawCote(ox,oy-22,ox+s,oy-22,dims.cote+"m","cote");
+      drawCote(ox+s+22,oy,ox+s+22,oy+s,dims.cote+"m","cote");
     }else if(forme==="rectangle"){
       const w=Number(dims.lon||1)*sc,h=Number(dims.lar||1)*sc;
-      drawCote(ox,oy-20,ox+w,oy-20,dims.lon+"m","lon");
-      drawCote(ox+w+20,oy,ox+w+20,oy+h,dims.lar+"m","lar");
+      drawCote(ox,oy-22,ox+w,oy-22,dims.lon+"m","lon");
+      drawCote(ox+w+22,oy,ox+w+22,oy+h,dims.lar+"m","lar");
     }else if(forme==="triangle"){
       const b=Number(dims.base||1)*sc,h=Number(dims.haut||1)*sc;
-      drawCote(ox,oy+h+20,ox+b,oy+h+20,dims.base+"m","base");
-      drawCote(ox+b+20,oy+h/2,ox+b+20,oy+h,dims.haut+"m","haut");
+      drawCote(ox,oy+h+22,ox+b,oy+h+22,dims.base+"m","base");
+      drawCote(ox+b+22,oy,ox+b+22,oy+h,dims.haut+"m","haut");
     }else{
       const ch=CHAMPS[forme]||[];
-      ch.forEach((c,i)=>{
+      ch.slice(0,2).forEach((c,i)=>{
         const v=Number(dims[c.k]||1)*sc;
-        drawCote(ox+(i%2)*v/2,oy-(20+i*22),ox+v-(i%2)*v/2,oy-(20+i*22),dims[c.k]+"m",c.k);
+        drawCote(ox,oy-(22+i*24),ox+v,oy-(22+i*24),dims[c.k]+"m",c.k);
       });
     }
 
     ctx.textAlign="left";
 
-    // Barre échelle
+    // Barre échelle (fixe en bas à gauche)
     const bLen=sc*2;
     ctx.strokeStyle="#888";ctx.lineWidth=1.5;ctx.setLineDash([]);
     ctx.beginPath();ctx.moveTo(8,CH-12);ctx.lineTo(8+bLen,CH-12);ctx.stroke();
@@ -113,8 +130,12 @@ function PlanCanvas({forme,dims,onDimTap}){
     ctx.beginPath();ctx.moveTo(8+bLen,CH-17);ctx.lineTo(8+bLen,CH-7);ctx.stroke();
     ctx.fillStyle="#888";ctx.font="10px sans-serif";ctx.fillText("2m",8+bLen/2-8,CH-16);
 
-    // Nord
+    // Nord (fixe en haut à droite)
     ctx.fillStyle="#b06010";ctx.font="bold 12px sans-serif";ctx.fillText("N↑",CW-24,16);
+
+    // Zoom indicator
+    ctx.fillStyle="#aaa";ctx.font="10px sans-serif";
+    ctx.fillText("×"+z.toFixed(1),CW-28,CH-8);
   },[forme,dims]);
 
   useEffect(()=>{draw();},[draw]);
@@ -122,9 +143,40 @@ function PlanCanvas({forme,dims,onDimTap}){
   useEffect(()=>{
     const cv=cvRef.current;if(!cv)return;
     let moved=false;
+
+    const ts=e=>{
+      e.preventDefault();
+      if(e.touches.length===1){
+        drag.current=true;moved=false;
+        lastT.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
+      }
+      if(e.touches.length===2){
+        const dx=e.touches[0].clientX-e.touches[1].clientX;
+        const dy=e.touches[0].clientY-e.touches[1].clientY;
+        pinch.current=Math.sqrt(dx*dx+dy*dy);
+      }
+    };
+
+    const tm=e=>{
+      e.preventDefault();moved=true;
+      if(e.touches.length===1&&drag.current&&lastT.current){
+        pan.current.x+=e.touches[0].clientX-lastT.current.x;
+        pan.current.y+=e.touches[0].clientY-lastT.current.y;
+        lastT.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
+        draw();
+      }
+      if(e.touches.length===2&&pinch.current){
+        const dx=e.touches[0].clientX-e.touches[1].clientX;
+        const dy=e.touches[0].clientY-e.touches[1].clientY;
+        const d=Math.sqrt(dx*dx+dy*dy);
+        zoom.current=Math.min(6,Math.max(0.3,zoom.current*(d/pinch.current)));
+        pinch.current=d;draw();
+      }
+    };
+
     const te=e=>{
-      if(moved){moved=false;return;}
-      if(e.changedTouches.length===1){
+      drag.current=false;pinch.current=null;
+      if(!moved&&e.changedTouches.length===1){
         const r=cv.getBoundingClientRect();
         const tx=(e.changedTouches[0].clientX-r.left)*(CW/r.width);
         const ty=(e.changedTouches[0].clientY-r.top)*(CH/r.height);
@@ -133,26 +185,40 @@ function PlanCanvas({forme,dims,onDimTap}){
         });
       }
     };
-    const tm=()=>{moved=true;};
-    cv.addEventListener("touchmove",tm);
-    cv.addEventListener("touchend",te);
-    return()=>{cv.removeEventListener("touchmove",tm);cv.removeEventListener("touchend",te);};
-  },[onDimTap]);
 
-  return(
+    cv.addEventListener("touchstart",ts,{passive:false});
+    cv.addEventListener("touchmove",tm,{passive:false});
+    cv.addEventListener("touchend",te);
+    return()=>{
+      cv.removeEventListener("touchstart",ts);
+      cv.removeEventListener("touchmove",tm);
+      cv.removeEventListener("touchend",te);
+    };
+  },[draw,onDimTap]);
+
+  const reset=()=>{zoom.current=1;pan.current={x:0,y:0};draw();};
+
+  return(<div>
     <canvas ref={cvRef} width={CW} height={CH}
       style={{borderRadius:12,display:"block",margin:"0 auto",width:"100%",maxWidth:CW,touchAction:"none",boxShadow:"0 2px 12px rgba(0,0,0,0.15)"}}/>
-  );
+    <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:8}}>
+      <button onClick={()=>{zoom.current=Math.min(6,zoom.current+0.4);draw();}} style={Sb}>＋</button>
+      <button onClick={()=>{zoom.current=Math.max(0.3,zoom.current-0.4);draw();}} style={Sb}>－</button>
+      <button onClick={reset} style={Sb}>⌂ Centrer</button>
+    </div>
+  </div>);
 }
 
-function EditModal({dimKey,value,label,onSave,onClose}){
+const Sb={background:"#2a2d3e",border:"1px solid #3a3d4e",borderRadius:8,color:"#fff",padding:"6px 16px",fontSize:14,cursor:"pointer"};
+
+function EditModal({value,label,onSave,onClose}){
   const[v,sv]=useState(String(value));
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}}>
       <div style={{background:"#1c1f2e",borderRadius:16,padding:24,width:"100%",maxWidth:300}}>
         <p style={{color:"#e8a838",fontWeight:700,fontSize:16,margin:"0 0 16px"}}>✏️ {label}</p>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20}}>
-          <button onClick={()=>sv(p=>String(Math.max(0.5,(parseFloat(p)-0.5).toFixed(1))))}
+          <button onClick={()=>sv(p=>String(Math.max(0.5,parseFloat(p)-0.5).toFixed(1)))}
             style={{background:"#2a2d3e",border:"1px solid #444",borderRadius:8,color:"#fff",fontSize:22,padding:"6px 14px",cursor:"pointer"}}>−</button>
           <input type="number" value={v} min="0.5" step="0.5" onChange={e=>sv(e.target.value)}
             style={{flex:1,background:"#12151f",border:"2px solid #e8a838",borderRadius:8,color:"#fff",fontSize:24,padding:"8px",textAlign:"center"}}/>
@@ -174,16 +240,16 @@ function Plan({data,onR}){
   const ch=CHAMPS[data.id]||[];
   const n=k=>Number(dims[k]||1);
   const surf=data.id==="carre"?(n("cote")**2).toFixed(2):data.id==="rectangle"?(n("lon")*n("lar")).toFixed(2):data.id==="triangle"?((n("base")*n("haut"))/2).toFixed(2):"—";
-  const handleTap=key=>{const c=ch.find(x=>x.k===key);if(c)setEditing({key,label:c.l,value:dims[key]||"1"});};
   return(
     <div style={S.screen}>
-      {editing&&<EditModal dimKey={editing.key} value={editing.value} label={editing.label}
+      {editing&&<EditModal value={editing.value} label={editing.label}
         onSave={v=>{setDims(d=>({...d,[editing.key]:v}));setEditing(null);}}
         onClose={()=>setEditing(null)}/>}
       <button onClick={onR} style={S.back}>← Retour</button>
       <h2 style={{...S.h2,marginBottom:2}}>{data.emoji} {data.label}</h2>
-      <p style={{color:"#888",fontSize:12,marginBottom:8}}>💡 Touche une cote bleue pour modifier</p>
-      <PlanCanvas forme={data.id} dims={dims} onDimTap={handleTap}/>
+      <p style={{color:"#888",fontSize:12,marginBottom:8}}>💡 Glisse pour naviguer · Pince pour zoomer · Touche une cote bleue pour modifier</p>
+      <PlanCanvas forme={data.id} dims={dims}
+        onDimTap={key=>{const c=ch.find(x=>x.k===key);if(c)setEditing({key,label:c.l,value:dims[key]||"1"});}}/>
       <div style={{...S.card,marginTop:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{color:"#aaa",fontSize:14}}>Surface</span>
         <span style={{color:"#e8a838",fontWeight:800,fontSize:22}}>{surf} m²</span>
