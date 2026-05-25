@@ -1,7 +1,7 @@
 import{useState,useRef,useEffect,useCallback}from"react";
 const F=[{id:"carre",label:"Carré",emoji:"⬜"},{id:"rectangle",label:"Rectangle",emoji:"▬"},{id:"triangle",label:"Triangle",emoji:"🔺"},{id:"U",label:"U",emoji:"⊓"},{id:"L",label:"L",emoji:"⌐"}];
 const CHAMPS={carre:[{k:"cote",l:"Côté (m)"}],rectangle:[{k:"lon",l:"Longueur"},{k:"lar",l:"Largeur"}],triangle:[{k:"base",l:"Base"},{k:"haut",l:"Hauteur"}],L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"w1",l:"Larg.1"},{k:"w2",l:"Larg.2"}],U:[{k:"lt",l:"Larg.tot"},{k:"ht",l:"Haut.tot"},{k:"ep",l:"Épais."}]};
-const CW=340,CH=320,PAD=52,BASE_GS=40;
+const CW=340,CH=340,PAD=52,BASE_GS=40;
 
 function getRealSize(f,d){
   const n=k=>Number(d[k]||1);
@@ -23,7 +23,13 @@ function getPts(f,d,ox,oy,sc){
   return[];
 }
 
-function PlanCanvas({forme,dims,onDimTap}){
+function getCentroid(pts){
+  const x=pts.reduce((s,p)=>s+p[0],0)/pts.length;
+  const y=pts.reduce((s,p)=>s+p[1],0)/pts.length;
+  return{x,y};
+}
+
+function PlanCanvas({forme,dims,surf,onDimTap}){
   const cvRef=useRef();
   const zoom=useRef(1);
   const pan=useRef({x:0,y:0});
@@ -36,27 +42,19 @@ function PlanCanvas({forme,dims,onDimTap}){
     const cv=cvRef.current;if(!cv)return;
     const ctx=cv.getContext("2d");
     ctx.clearRect(0,0,CW,CH);
+    const z=zoom.current,px=pan.current.x,py=pan.current.y;
 
-    const z=zoom.current;
-    const px=pan.current.x;
-    const py=pan.current.y;
+    // Fond
+    ctx.fillStyle="#f5f0e8";ctx.fillRect(0,0,CW,CH);
 
-    // Fond fixe
-    ctx.fillStyle="#f5f0e8";
-    ctx.fillRect(0,0,CW,CH);
-
-    // Grille qui bouge AVEC le plan (même référentiel)
+    // Grille solidaire du plan
     const gs=BASE_GS*z;
-    // Point d'origine de la grille = coin haut-gauche du plan dans le monde
     const rs=getRealSize(forme,dims);
     const sc0=Math.min((CW-PAD*2)/rs.w,(CH-PAD*2)/rs.h);
     const sc=sc0*z;
     const planW=rs.w*sc,planH=rs.h*sc;
-    const planX=CW/2-planW/2+px;
-    const planY=CH/2-planH/2+py;
-    // Origine grille alignée sur coin plan
-    const gox=((planX%gs)+gs)%gs;
-    const goy=((planY%gs)+gs)%gs;
+    const planX=CW/2-planW/2+px,planY=CH/2-planH/2+py;
+    const gox=((planX%gs)+gs)%gs,goy=((planY%gs)+gs)%gs;
 
     ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
     for(let x=gox-gs;x<CW+gs;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
@@ -65,7 +63,7 @@ function PlanCanvas({forme,dims,onDimTap}){
     for(let x=gox-gs*5;x<CW+gs*5;x+=gs*5){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
     for(let y=goy-gs*5;y<CH+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
 
-    // Plan ancré sur la grille
+    // Pièce
     const ox=planX,oy=planY;
     const pts=getPts(forme,dims,ox,oy,sc);
     if(!pts.length)return;
@@ -73,31 +71,40 @@ function PlanCanvas({forme,dims,onDimTap}){
     ctx.shadowColor="rgba(0,0,0,0.12)";ctx.shadowBlur=6;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;
     ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
-    ctx.closePath();
-    ctx.fillStyle="rgba(255,252,235,0.97)";ctx.fill();
+    ctx.closePath();ctx.fillStyle="rgba(255,252,235,0.97)";ctx.fill();
     ctx.shadowColor="transparent";ctx.shadowBlur=0;
     ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
-    ctx.closePath();
-    ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
+    ctx.closePath();ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
 
-    // Cotes
+    // Surface au centre du plan
+    const cen=getCentroid(pts);
+    ctx.textAlign="center";
+    ctx.font="bold 14px sans-serif";
+    const surfTxt=surf+" m²";
+    const tw=ctx.measureText(surfTxt).width+16;
+    ctx.fillStyle="rgba(255,255,255,0.85)";
+    if(ctx.roundRect)ctx.roundRect(cen.x-tw/2,cen.y-11,tw,22,6);
+    else ctx.rect(cen.x-tw/2,cen.y-11,tw,22);
+    ctx.fill();
+    ctx.fillStyle="#c8820a";ctx.fillText(surfTxt,cen.x,cen.y+5);
+
+    // Cotes cliquables
     hitZones.current=[];
-    ctx.font="bold 11px sans-serif";ctx.textAlign="center";
+    ctx.font="bold 11px sans-serif";
 
     const drawCote=(x1,y1,x2,y2,label,key)=>{
       ctx.setLineDash([5,3]);ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);
       const mx=(x1+x2)/2,my=(y1+y2)/2;
-      const tw=Math.max(label.length*7+12,36),th=18;
+      const tw2=Math.max(label.length*7+12,36),th=18;
       ctx.fillStyle="#fff";ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1.5;
       ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(mx-tw/2,my-th/2,tw,th,5);
-      else ctx.rect(mx-tw/2,my-th/2,tw,th);
+      if(ctx.roundRect)ctx.roundRect(mx-tw2/2,my-th/2,tw2,th,5);
+      else ctx.rect(mx-tw2/2,my-th/2,tw2,th);
       ctx.fill();ctx.stroke();
-      ctx.fillStyle="#2a7fd4";ctx.fillText(label,mx,my+4);
-      hitZones.current.push({x:mx-tw/2,y:my-th/2,w:tw,h:th,key});
+      ctx.fillStyle="#2a7fd4";ctx.textAlign="center";ctx.fillText(label,mx,my+4);
+      hitZones.current.push({x:mx-tw2/2,y:my-th/2,w:tw2,h:th,key});
     };
 
     if(forme==="carre"){
@@ -122,58 +129,42 @@ function PlanCanvas({forme,dims,onDimTap}){
 
     ctx.textAlign="left";
 
-    // Barre échelle (fixe en bas à gauche)
+    // Barre échelle
     const bLen=sc*2;
-    ctx.strokeStyle="#888";ctx.lineWidth=1.5;ctx.setLineDash([]);
+    ctx.strokeStyle="#999";ctx.lineWidth=1.5;ctx.setLineDash([]);
     ctx.beginPath();ctx.moveTo(8,CH-12);ctx.lineTo(8+bLen,CH-12);ctx.stroke();
     ctx.beginPath();ctx.moveTo(8,CH-17);ctx.lineTo(8,CH-7);ctx.stroke();
     ctx.beginPath();ctx.moveTo(8+bLen,CH-17);ctx.lineTo(8+bLen,CH-7);ctx.stroke();
-    ctx.fillStyle="#888";ctx.font="10px sans-serif";ctx.fillText("2m",8+bLen/2-8,CH-16);
+    ctx.fillStyle="#999";ctx.font="10px sans-serif";ctx.fillText("2m",8+bLen/2-8,CH-16);
 
-    // Nord (fixe en haut à droite)
+    // Nord
     ctx.fillStyle="#b06010";ctx.font="bold 12px sans-serif";ctx.fillText("N↑",CW-24,16);
-
-    // Zoom indicator
-    ctx.fillStyle="#aaa";ctx.font="10px sans-serif";
-    ctx.fillText("×"+z.toFixed(1),CW-28,CH-8);
-  },[forme,dims]);
+  },[forme,dims,surf]);
 
   useEffect(()=>{draw();},[draw]);
 
   useEffect(()=>{
     const cv=cvRef.current;if(!cv)return;
     let moved=false;
-
     const ts=e=>{
-      e.preventDefault();
-      if(e.touches.length===1){
-        drag.current=true;moved=false;
-        lastT.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
-      }
-      if(e.touches.length===2){
-        const dx=e.touches[0].clientX-e.touches[1].clientX;
-        const dy=e.touches[0].clientY-e.touches[1].clientY;
-        pinch.current=Math.sqrt(dx*dx+dy*dy);
-      }
+      e.preventDefault();moved=false;
+      if(e.touches.length===1){drag.current=true;lastT.current={x:e.touches[0].clientX,y:e.touches[0].clientY};}
+      if(e.touches.length===2){const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;pinch.current=Math.sqrt(dx*dx+dy*dy);}
     };
-
     const tm=e=>{
       e.preventDefault();moved=true;
       if(e.touches.length===1&&drag.current&&lastT.current){
         pan.current.x+=e.touches[0].clientX-lastT.current.x;
         pan.current.y+=e.touches[0].clientY-lastT.current.y;
-        lastT.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
-        draw();
+        lastT.current={x:e.touches[0].clientX,y:e.touches[0].clientY};draw();
       }
       if(e.touches.length===2&&pinch.current){
-        const dx=e.touches[0].clientX-e.touches[1].clientX;
-        const dy=e.touches[0].clientY-e.touches[1].clientY;
+        const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
         const d=Math.sqrt(dx*dx+dy*dy);
         zoom.current=Math.min(6,Math.max(0.3,zoom.current*(d/pinch.current)));
         pinch.current=d;draw();
       }
     };
-
     const te=e=>{
       drag.current=false;pinch.current=null;
       if(!moved&&e.changedTouches.length===1){
@@ -185,31 +176,17 @@ function PlanCanvas({forme,dims,onDimTap}){
         });
       }
     };
-
     cv.addEventListener("touchstart",ts,{passive:false});
     cv.addEventListener("touchmove",tm,{passive:false});
     cv.addEventListener("touchend",te);
-    return()=>{
-      cv.removeEventListener("touchstart",ts);
-      cv.removeEventListener("touchmove",tm);
-      cv.removeEventListener("touchend",te);
-    };
+    return()=>{cv.removeEventListener("touchstart",ts);cv.removeEventListener("touchmove",tm);cv.removeEventListener("touchend",te);};
   },[draw,onDimTap]);
 
-  const reset=()=>{zoom.current=1;pan.current={x:0,y:0};draw();};
-
-  return(<div>
+  return(
     <canvas ref={cvRef} width={CW} height={CH}
       style={{borderRadius:12,display:"block",margin:"0 auto",width:"100%",maxWidth:CW,touchAction:"none",boxShadow:"0 2px 12px rgba(0,0,0,0.15)"}}/>
-    <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:8}}>
-      <button onClick={()=>{zoom.current=Math.min(6,zoom.current+0.4);draw();}} style={Sb}>＋</button>
-      <button onClick={()=>{zoom.current=Math.max(0.3,zoom.current-0.4);draw();}} style={Sb}>－</button>
-      <button onClick={reset} style={Sb}>⌂ Centrer</button>
-    </div>
-  </div>);
+  );
 }
-
-const Sb={background:"#2a2d3e",border:"1px solid #3a3d4e",borderRadius:8,color:"#fff",padding:"6px 16px",fontSize:14,cursor:"pointer"};
 
 function EditModal({value,label,onSave,onClose}){
   const[v,sv]=useState(String(value));
@@ -246,15 +223,10 @@ function Plan({data,onR}){
         onSave={v=>{setDims(d=>({...d,[editing.key]:v}));setEditing(null);}}
         onClose={()=>setEditing(null)}/>}
       <button onClick={onR} style={S.back}>← Retour</button>
-      <h2 style={{...S.h2,marginBottom:2}}>{data.emoji} {data.label}</h2>
-      <p style={{color:"#888",fontSize:12,marginBottom:8}}>💡 Glisse pour naviguer · Pince pour zoomer · Touche une cote bleue pour modifier</p>
-      <PlanCanvas forme={data.id} dims={dims}
+      <h2 style={{...S.h2,marginBottom:10}}>{data.emoji} {data.label}</h2>
+      <PlanCanvas forme={data.id} dims={dims} surf={surf}
         onDimTap={key=>{const c=ch.find(x=>x.k===key);if(c)setEditing({key,label:c.l,value:dims[key]||"1"});}}/>
-      <div style={{...S.card,marginTop:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{color:"#aaa",fontSize:14}}>Surface</span>
-        <span style={{color:"#e8a838",fontWeight:800,fontSize:22}}>{surf} m²</span>
-      </div>
-      <button style={{...S.cta,marginTop:12}}>✚ Portes &amp; fenêtres</button>
+      <button style={{...S.cta,marginTop:14}}>✚ Portes &amp; fenêtres</button>
     </div>
   );
 }
@@ -305,6 +277,5 @@ const S={
   lbl:{color:"#aaa",fontSize:13,fontWeight:600,display:"block",marginBottom:4},
   inp:{width:"100%",padding:12,background:"#1c1f2e",border:"1px solid #333",borderRadius:10,color:"#fff",fontSize:18,boxSizing:"border-box"},
   cta:{width:"100%",padding:16,background:"#e8a838",border:"none",borderRadius:12,fontWeight:800,fontSize:17,cursor:"pointer",color:"#0f1117"},
-  card:{background:"#1c1f2e",borderRadius:12,padding:"14px 16px"},
   card2:{background:"#1c1f2e",border:"2px solid #2e3248",borderRadius:14,padding:20,color:"#fff",cursor:"pointer",textAlign:"center",width:"100%"}
 };
