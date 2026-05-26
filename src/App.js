@@ -1,56 +1,6 @@
 import{useState,useRef,useEffect,useCallback}from"react";
 const F=[{id:"carre",label:"Carré"},{id:"rectangle",label:"Rectangle"},{id:"triangle",label:"Triangle"},{id:"U",label:"Forme U"},{id:"L",label:"Forme L"}];
 
-// Définition des arêtes PAR FORME — chacune a son propre key stocké
-const ARETES_DEF={
-  carre:[
-    {id:"top",   label:"Haut",    key:"top",   axe:"h"},
-    {id:"right", label:"Droite",  key:"right", axe:"v"},
-    {id:"bot",   label:"Bas",     key:"bot",   axe:"h"},
-    {id:"left",  label:"Gauche",  key:"left",  axe:"v"},
-  ],
-  rectangle:[
-    {id:"top",   label:"Longueur haut",  key:"top",   axe:"h"},
-    {id:"right", label:"Largeur droite", key:"right", axe:"v"},
-    {id:"bot",   label:"Longueur bas",   key:"bot",   axe:"h"},
-    {id:"left",  label:"Largeur gauche", key:"left",  axe:"v"},
-  ],
-  triangle:[
-    {id:"base",  label:"Base",         key:"base",  axe:"h"},
-    {id:"right", label:"Côté droit",   key:"right", axe:"d"},
-    {id:"left",  label:"Côté gauche",  key:"left",  axe:"d"},
-  ],
-  L:[
-    {id:"top",   label:"Long. haut",    key:"top",   axe:"h"},
-    {id:"r1",    label:"Larg. droite 1",key:"r1",    axe:"v"},
-    {id:"mid",   label:"Retrait",       key:"mid",   axe:"h"},
-    {id:"r2",    label:"Larg. droite 2",key:"r2",    axe:"v"},
-    {id:"bot",   label:"Long. bas",     key:"bot",   axe:"h"},
-    {id:"left",  label:"Hauteur tot.",  key:"left",  axe:"v"},
-  ],
-  U:[
-    {id:"top",   label:"Largeur tot.",  key:"top",   axe:"h"},
-    {id:"rout",  label:"Hauteur droite",key:"rout",  axe:"v"},
-    {id:"br",    label:"Épais. droite", key:"br",    axe:"h"},
-    {id:"rin",   label:"Haut. int. dr.",key:"rin",   axe:"v"},
-    {id:"inner", label:"Larg. intér.",  key:"inner", axe:"h"},
-    {id:"lin",   label:"Haut. int. ga.",key:"lin",   axe:"v"},
-    {id:"bl",    label:"Épais. gauche", key:"bl",    axe:"h"},
-    {id:"lout",  label:"Hauteur gauche",key:"lout",  axe:"v"},
-  ],
-};
-
-// Dims initiales depuis les champs de saisie → convertit en dims par arête
-function initDims(forme,raw){
-  const n=k=>Math.max(0.1,Number(raw[k]||1));
-  if(forme==="carre"){const c=n("cote");return{top:c,right:c,bot:c,left:c};}
-  if(forme==="rectangle"){const w=n("lon"),h=n("lar");return{top:w,right:h,bot:w,left:h};}
-  if(forme==="triangle"){const b=n("base"),h=n("haut");return{base:b,right:h,left:h};}
-  if(forme==="L"){const l1=n("l1"),l2=n("l2"),w1=n("w1"),w2=n("w2");return{top:l1,r1:w1,mid:l1-l2,r2:w2,bot:l2,left:w1+w2};}
-  if(forme==="U"){const lt=n("lt"),ht=n("ht"),ep=n("ep");const iw=Math.max(0.1,lt-2*ep),ih=Math.max(0.1,ht-ep);return{top:lt,rout:ht,br:ep,rin:ih,inner:iw,lin:ih,bl:ep,lout:ht};}
-  return{};
-}
-
 const CHAMPS_INIT={
   carre:[{k:"cote",l:"Côté (m)"}],
   rectangle:[{k:"lon",l:"Longueur"},{k:"lar",l:"Largeur"}],
@@ -59,83 +9,100 @@ const CHAMPS_INIT={
   U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur"}],
 };
 
-function calcSurf(f,d){
-  const n=k=>Math.max(0,Number(d[k]||0));
-  if(f==="carre")return((n("top")+n("bot"))/2*(n("left")+n("right"))/2).toFixed(2);
-  if(f==="rectangle")return((n("top")+n("bot"))/2*(n("left")+n("right"))/2).toFixed(2);
-  if(f==="triangle")return((n("base")*((n("left")+n("right"))/2))/2).toFixed(2);
-  if(f==="L")return(n("top")*n("r1")+n("bot")*n("r2")).toFixed(2);
-  if(f==="U")return(n("top")*(n("rout"))-(n("inner")*n("rin"))).toFixed(2);
-  return"—";
+// Chaque arête a son propre key indépendant
+function initDims(f,r){
+  const n=k=>Math.max(0.1,Number(r[k]||1));
+  if(f==="carre"){const c=n("cote");return{top:c,right:c,bot:c,left:c};}
+  if(f==="rectangle"){const w=n("lon"),h=n("lar");return{top:w,right:h,bot:w,left:h};}
+  if(f==="triangle"){const b=n("base"),h=n("haut");return{base:b,right:h,left:h};}
+  if(f==="L"){const l1=n("l1"),l2=n("l2"),w1=n("w1"),w2=n("w2");return{top:l1,r1:w1,mid:Math.max(0.1,l1-l2),r2:w2,bot:l2,left:w1+w2};}
+  if(f==="U"){const lt=n("lt"),ht=n("ht"),ep=n("ep");return{top:lt,rout:ht,br:ep,rin:Math.max(0.1,ht-ep),inner:Math.max(0.1,lt-2*ep),lin:Math.max(0.1,ht-ep),bl:ep,lout:ht};}
+  return{};
 }
 
-function getPts(f,d,ox,oy){
-  const n=k=>Math.max(0.1,Number(d[k]||1));
+const LABELS={
+  top:"Haut",right:"Droite",bot:"Bas",left:"Gauche",
+  r1:"Larg.dr.1",mid:"Retrait",r2:"Larg.dr.2",
+  rout:"Haut.dr.",br:"Épais.dr.",rin:"Haut.int.dr.",inner:"Larg.int.",lin:"Haut.int.ga.",bl:"Épais.ga.",lout:"Haut.ga."
+};
+
+function n(d,k){return Math.max(0.1,Number(d[k]||1));}
+
+function getRealSize(f,d){
+  if(f==="carre"||f==="rectangle")return{w:Math.max(n(d,"top"),n(d,"bot")),h:Math.max(n(d,"left"),n(d,"right"))};
+  if(f==="triangle")return{w:n(d,"base"),h:Math.max(n(d,"left"),n(d,"right"))};
+  if(f==="L")return{w:n(d,"top"),h:n(d,"r1")+n(d,"r2")};
+  if(f==="U")return{w:n(d,"top"),h:n(d,"rout")};
+  return{w:5,h:5};
+}
+
+// Points du polygone en pixels — utilise sc correctement
+function getPts(f,d,ox,oy,sc){
+  const s=k=>n(d,k)*sc;
   if(f==="carre"||f==="rectangle"){
-    const w=(n("top")+n("bot"))/2,h=(n("left")+n("right"))/2;
+    const w=s("top"),h=s("right");
     return[[ox,oy],[ox+w,oy],[ox+w,oy+h],[ox,oy+h]];
   }
   if(f==="triangle"){
-    const b=n("base"),h=(n("left")+n("right"))/2;
+    const b=s("base"),h=s("right");
     return[[ox+b/2,oy],[ox+b,oy+h],[ox,oy+h]];
   }
   if(f==="L"){
-    const t=n("top"),r1=n("r1"),mid=n("mid"),r2=n("r2"),bot=n("bot");
+    const t=s("top"),r1=s("r1"),mid=s("mid"),r2=s("r2"),bot=s("bot");
     return[[ox,oy],[ox+t,oy],[ox+t,oy+r1],[ox+t-mid,oy+r1],[ox+t-mid,oy+r1+r2],[ox,oy+r1+r2]];
   }
   if(f==="U"){
-    const t=n("top"),ro=n("rout"),br=n("br"),iw=n("inner"),ri=n("rin");
-    const ep=(t-iw)/2;
+    const t=s("top"),ro=s("rout"),ep=(s("top")-s("inner"))/2,ri=s("rin");
     return[[ox,oy],[ox+t,oy],[ox+t,oy+ro],[ox+t-ep,oy+ro],[ox+t-ep,oy+ro-ri],[ox+ep,oy+ro-ri],[ox+ep,oy+ro],[ox,oy+ro]];
   }
   return[];
 }
 
-function getRealSize(f,d){
-  const n=k=>Math.max(0.1,Number(d[k]||1));
-  if(f==="carre"||f==="rectangle")return{w:(n("top")+n("bot"))/2,h:(n("left")+n("right"))/2};
-  if(f==="triangle")return{w:n("base"),h:(n("left")+n("right"))/2};
-  if(f==="L")return{w:n("top"),h:n("r1")+n("r2")};
-  if(f==="U")return{w:n("top"),h:n("rout")};
-  return{w:5,h:5};
+// Arêtes avec leurs coordonnées pixel et leur key indépendante
+function getAretePts(f,d,ox,oy,sc){
+  const s=k=>n(d,k)*sc;
+  const ar=[];
+  if(f==="carre"||f==="rectangle"){
+    const w=s("top"),h=s("right");
+    ar.push({key:"top",   x1:ox,   y1:oy,   x2:ox+w, y2:oy});
+    ar.push({key:"right", x1:ox+w, y1:oy,   x2:ox+w, y2:oy+h});
+    ar.push({key:"bot",   x1:ox,   y1:oy+h, x2:ox+w, y2:oy+h});
+    ar.push({key:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+h});
+  }else if(f==="triangle"){
+    const b=s("base"),h=s("right");
+    ar.push({key:"base",  x1:ox,     y1:oy+h, x2:ox+b,   y2:oy+h});
+    ar.push({key:"right", x1:ox+b/2, y1:oy,   x2:ox+b,   y2:oy+h});
+    ar.push({key:"left",  x1:ox,     y1:oy+h, x2:ox+b/2, y2:oy});
+  }else if(f==="L"){
+    const t=s("top"),r1=s("r1"),mid=s("mid"),r2=s("r2"),bot=s("bot");
+    ar.push({key:"top",  x1:ox,       y1:oy,       x2:ox+t,     y2:oy});
+    ar.push({key:"r1",   x1:ox+t,     y1:oy,       x2:ox+t,     y2:oy+r1});
+    ar.push({key:"mid",  x1:ox+t-mid, y1:oy+r1,    x2:ox+t,     y2:oy+r1});
+    ar.push({key:"r2",   x1:ox+t-mid, y1:oy+r1,    x2:ox+t-mid, y2:oy+r1+r2});
+    ar.push({key:"bot",  x1:ox,       y1:oy+r1+r2, x2:ox+t-mid, y2:oy+r1+r2});
+    ar.push({key:"left", x1:ox,       y1:oy,       x2:ox,        y2:oy+r1+r2});
+  }else if(f==="U"){
+    const t=s("top"),ro=s("rout"),ri=s("rin"),iw=s("inner");
+    const ep=(s("top")-s("inner"))/2;
+    ar.push({key:"top",   x1:ox,      y1:oy,       x2:ox+t,    y2:oy});
+    ar.push({key:"rout",  x1:ox+t,    y1:oy,       x2:ox+t,    y2:oy+ro});
+    ar.push({key:"br",    x1:ox+t-ep, y1:oy+ro,    x2:ox+t,    y2:oy+ro});
+    ar.push({key:"rin",   x1:ox+t-ep, y1:oy+ro-ri, x2:ox+t-ep, y2:oy+ro});
+    ar.push({key:"inner", x1:ox+ep,   y1:oy+ro-ri, x2:ox+t-ep, y2:oy+ro-ri});
+    ar.push({key:"lin",   x1:ox+ep,   y1:oy+ro-ri, x2:ox+ep,   y2:oy+ro});
+    ar.push({key:"bl",    x1:ox,      y1:oy+ro,    x2:ox+ep,   y2:oy+ro});
+    ar.push({key:"lout",  x1:ox,      y1:oy,       x2:ox,      y2:oy+ro});
+  }
+  return ar;
 }
 
-function getAretePts(f,d,ox,oy,sc){
-  const n=k=>Math.max(0.1,Number(d[k]||1))*sc;
-  const r=[];
-  if(f==="carre"||f==="rectangle"){
-    const w=(Number(d.top||1)+Number(d.bot||1))/2*sc;
-    const h=(Number(d.left||1)+Number(d.right||1))/2*sc;
-    r.push({key:"top",   x1:ox,   y1:oy,   x2:ox+w, y2:oy});
-    r.push({key:"right", x1:ox+w, y1:oy,   x2:ox+w, y2:oy+h});
-    r.push({key:"bot",   x1:ox,   y1:oy+h, x2:ox+w, y2:oy+h});
-    r.push({key:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+h});
-  }else if(f==="triangle"){
-    const b=n("base"),h=(Number(d.left||1)+Number(d.right||1))/2*sc;
-    r.push({key:"base",  x1:ox,     y1:oy+h, x2:ox+b,   y2:oy+h});
-    r.push({key:"right", x1:ox+b/2, y1:oy,   x2:ox+b,   y2:oy+h});
-    r.push({key:"left",  x1:ox,     y1:oy+h, x2:ox+b/2, y2:oy});
-  }else if(f==="L"){
-    const t=n("top"),r1=n("r1"),mid=n("mid"),r2=n("r2"),bot=n("bot"),left=n("left");
-    r.push({key:"top",  x1:ox,       y1:oy,      x2:ox+t,     y2:oy});
-    r.push({key:"r1",   x1:ox+t,     y1:oy,      x2:ox+t,     y2:oy+r1});
-    r.push({key:"mid",  x1:ox+t-mid, y1:oy+r1,   x2:ox+t,     y2:oy+r1});
-    r.push({key:"r2",   x1:ox+t-mid, y1:oy+r1,   x2:ox+t-mid, y2:oy+r1+r2});
-    r.push({key:"bot",  x1:ox,       y1:oy+r1+r2,x2:ox+t-mid, y2:oy+r1+r2});
-    r.push({key:"left", x1:ox,       y1:oy,      x2:ox,        y2:oy+r1+r2});
-  }else if(f==="U"){
-    const t=n("top"),ro=n("rout"),br=n("br"),iw=n("inner"),ri=n("rin");
-    const ep=(Number(d.top||1)-Number(d.inner||1))/2*sc;
-    r.push({key:"top",   x1:ox,      y1:oy,      x2:ox+t,    y2:oy});
-    r.push({key:"rout",  x1:ox+t,    y1:oy,      x2:ox+t,    y2:oy+ro});
-    r.push({key:"br",    x1:ox+t-ep, y1:oy+ro,   x2:ox+t,    y2:oy+ro});
-    r.push({key:"rin",   x1:ox+t-ep, y1:oy+ro-ri,x2:ox+t-ep, y2:oy+ro});
-    r.push({key:"inner", x1:ox+ep,   y1:oy+ro-ri,x2:ox+t-ep, y2:oy+ro-ri});
-    r.push({key:"lin",   x1:ox+ep,   y1:oy+ro-ri,x2:ox+ep,   y2:oy+ro});
-    r.push({key:"bl",    x1:ox,      y1:oy+ro,   x2:ox+ep,   y2:oy+ro});
-    r.push({key:"lout",  x1:ox,      y1:oy,      x2:ox,      y2:oy+ro});
-  }
-  return r;
+function calcSurf(f,d){
+  const v=k=>Math.max(0,Number(d[k]||0));
+  if(f==="carre"||f==="rectangle")return(v("top")*v("right")).toFixed(2);
+  if(f==="triangle")return((v("base")*v("right"))/2).toFixed(2);
+  if(f==="L")return(v("top")*v("r1")+v("bot")*v("r2")).toFixed(2);
+  if(f==="U")return(v("top")*v("rout")-v("inner")*v("rin")).toFixed(2);
+  return"—";
 }
 
 function PlanCanvas({forme,dims,surf,onAreteTap}){
@@ -165,6 +132,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     const planY=H/2-rs.h*sc/2+py;
     const gox=((planX%gs)+gs)%gs,goy=((planY%gs)+gs)%gs;
 
+    // Grille solidaire
     ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
     for(let x=gox-gs;x<W+gs;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
     for(let y=goy-gs;y<H+gs;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
@@ -173,51 +141,51 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     for(let y=goy-gs*5;y<H+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
 
     const ox=planX,oy=planY;
-    const pts=getPts(forme,dims,ox,oy);
+    const pts=getPts(forme,dims,ox,oy,sc);
     if(!pts.length)return;
 
+    // Pièce remplie
     ctx.shadowColor="rgba(0,0,0,0.1)";ctx.shadowBlur=8;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;
     ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
     ctx.closePath();ctx.fillStyle="rgba(255,252,235,0.97)";ctx.fill();
     ctx.shadowColor="transparent";ctx.shadowBlur=0;
+
+    // Murs
     ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
     ctx.closePath();ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
 
+    // Surface au centre
     const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length;
     const cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
     ctx.textAlign="center";ctx.font="bold 14px sans-serif";
     const st=surf+" m²";const stw=ctx.measureText(st).width+18;
-    ctx.fillStyle="rgba(255,255,255,0.9)";
-    if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);else ctx.rect(cx-stw/2,cy-12,stw,22);
+    ctx.fillStyle="rgba(255,255,255,0.92)";
+    if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);
+    else ctx.rect(cx-stw/2,cy-12,stw,22);
     ctx.fill();ctx.fillStyle="#c8820a";ctx.fillText(st,cx,cy+5);
 
+    // Cotes — chaque arête indépendante
     hitZones.current=[];
     ctx.font="bold 11px sans-serif";
-    const arPts=getAretePts(forme,dims,ox,oy,sc);
-    const defs=ARETES_DEF[forme]||[];
-
-    arPts.forEach(ar=>{
+    getAretePts(forme,dims,ox,oy,sc).forEach(ar=>{
       const{key,x1,y1,x2,y2}=ar;
       if(Math.hypot(x2-x1,y2-y1)<4)return;
       const val=Number(dims[key]||1).toFixed(1).replace(/\.0$/,"")+"m";
-      const def=defs.find(d=>d.id===key)||{label:key};
       const mx=(x1+x2)/2,my=(y1+y2)/2;
       const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy)||1;
-      const nx=-dy/len,ny=dx/len;
-      const lx=mx+nx*26,ly=my+ny*26;
-
+      const lx=mx+(-dy/len)*26,ly=my+(dx/len)*26;
       ctx.setLineDash([4,3]);ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(lx,ly);ctx.stroke();ctx.setLineDash([]);
-
       const tw=Math.max(ctx.measureText(val).width+14,32),th=20;
       ctx.fillStyle="#e8f4ff";ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1.5;
       ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);else ctx.rect(lx-tw/2,ly-th/2,tw,th);
+      if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);
+      else ctx.rect(lx-tw/2,ly-th/2,tw,th);
       ctx.fill();ctx.stroke();
       ctx.fillStyle="#1a5fa8";ctx.textAlign="center";ctx.fillText(val,lx,ly+4);
-      hitZones.current.push({key,label:def.label,val:dims[key]||"1",x:lx-tw/2,y:ly-th/2,w:tw,h:th});
+      hitZones.current.push({key,label:LABELS[key]||key,val:String(dims[key]||1),x:lx-tw/2,y:ly-th/2,w:tw,h:th});
     });
 
     ctx.textAlign="left";
@@ -284,7 +252,7 @@ function EditModal({item,onSave,onClose}){
       <div style={{background:"#1c1f2e",borderRadius:16,padding:24,width:"100%",maxWidth:300}}>
         <p style={{color:"#e8a838",fontWeight:700,fontSize:16,margin:"0 0 4px"}}>✏️ {item.label}</p>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20}}>
-          <button onClick={()=>sv(p=>String(Math.max(0.1,parseFloat(p)-0.5).toFixed(1)))}
+          <button onClick={()=>sv(p=>String(Math.max(0.1,(parseFloat(p)-0.5)).toFixed(1)))}
             style={{background:"#2a2d3e",border:"1px solid #444",borderRadius:8,color:"#fff",fontSize:22,padding:"6px 14px",cursor:"pointer"}}>−</button>
           <input type="number" value={v} min="0.1" step="0.5" onChange={e=>sv(e.target.value)}
             style={{flex:1,background:"#12151f",border:"2px solid #e8a838",borderRadius:8,color:"#fff",fontSize:24,padding:"8px",textAlign:"center"}}/>
