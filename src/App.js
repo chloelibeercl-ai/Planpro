@@ -1,114 +1,103 @@
 import{useState,useRef,useEffect,useCallback}from"react";
 
-// =============================================
-// FORMES : définies par leurs points en mètres
-// Chaque forme retourne {points, aretes}
-// points = [{x,y}] coordonnées réelles en mètres
-// aretes = [{p1, p2, key, label}] relient 2 points
-// =============================================
+const FORMES=[
+  {id:"rectangle",label:"Rectangle"},
+  {id:"L",label:"Forme L"},
+  {id:"U",label:"Forme U"},
+  {id:"triangle",label:"Triangle"},
+];
 
-function buildForme(f,d){
-  const n=k=>Math.max(0.1,Number(d[k]||1));
+const CHAMPS_INIT={
+  rectangle:[{k:"w",l:"Largeur (m)"},{k:"h",l:"Hauteur (m)"}],
+  L:[{k:"l1",l:"Long. bras haut"},{k:"h1",l:"Haut. bras haut"},{k:"l2",l:"Long. bras bas"},{k:"h2",l:"Haut. bras bas"}],
+  U:[{k:"lt",l:"Larg. totale"},{k:"ht",l:"Haut. totale"},{k:"ep_g",l:"Épais. gauche"},{k:"ep_d",l:"Épais. droite"},{k:"ep_h",l:"Épais. barre haut"}],
+  triangle:[{k:"base",l:"Base"},{k:"haut",l:"Hauteur"},{k:"dec",l:"Décalage sommet"}],
+};
+
+// Construit les points en mètres et les arêtes
+// Chaque arête a une key UNIQUE pour édition indépendante
+function buildShape(f,d){
+  const g=k=>Math.max(0.1,Number(d[k]||1));
   if(f==="rectangle"){
-    const w=n("w"),h=n("h");
-    const pts=[{x:0,y:0},{x:w,y:0},{x:w,y:h},{x:0,y:h}];
-    return{pts,aretes:[
-      {p1:0,p2:1,key:"w_top",  label:"Haut"},
-      {p1:1,p2:2,key:"h_right",label:"Droite"},
-      {p1:3,p2:2,key:"w_bot",  label:"Bas"},
-      {p1:0,p2:3,key:"h_left", label:"Gauche"},
-    ]};
-  }
-  if(f==="triangle"){
-    const b=n("base"),h=n("haut"),dec=n("decalage");
-    const pts=[{x:0,y:h},{x:b,y:h},{x:dec,y:0}];
-    return{pts,aretes:[
-      {p1:0,p2:1,key:"base",  label:"Base"},
-      {p1:1,p2:2,key:"cote_r",label:"Côté dr."},
-      {p1:0,p2:2,key:"cote_l",label:"Côté ga."},
-    ]};
+    const w=g("w"),h=g("h");
+    return{
+      pts:[{x:0,y:0},{x:w,y:0},{x:w,y:h},{x:0,y:h}],
+      aretes:[
+        {p1:0,p2:1,key:"w",label:"Largeur haut"},
+        {p1:1,p2:2,key:"h",label:"Hauteur droite"},
+        {p1:2,p2:3,key:"w",label:"Largeur bas"},
+        {p1:3,p2:0,key:"h",label:"Hauteur gauche"},
+      ]
+    };
   }
   if(f==="L"){
-    const l1=n("l1"),l2=n("l2"),h1=n("h1"),h2=n("h2");
-    const pts=[
-      {x:0,  y:0},
-      {x:l1, y:0},
-      {x:l1, y:h1},
-      {x:l2, y:h1},
-      {x:l2, y:h1+h2},
-      {x:0,  y:h1+h2},
-    ];
-    return{pts,aretes:[
-      {p1:0,p2:1,key:"l1",   label:"Long.1"},
-      {p1:1,p2:2,key:"h1",   label:"Haut.1"},
-      {p1:2,p2:3,key:"ret",  label:"Retrait"},
-      {p1:3,p2:4,key:"h2",   label:"Haut.2"},
-      {p1:4,p2:5,key:"l2",   label:"Long.2"},
-      {p1:5,p2:0,key:"htot", label:"Haut.tot"},
-    ]};
+    // L = bras haut (large) + bras bas (moins large, aligné à gauche)
+    const l1=g("l1"),h1=g("h1"),l2=g("l2"),h2=g("h2");
+    return{
+      pts:[
+        {x:0,  y:0},       // 0 haut-gauche
+        {x:l1, y:0},       // 1 haut-droite
+        {x:l1, y:h1},      // 2 coin rentrant
+        {x:l2, y:h1},      // 3 coin rentrant bas
+        {x:l2, y:h1+h2},   // 4 bas-droite
+        {x:0,  y:h1+h2},   // 5 bas-gauche
+      ],
+      aretes:[
+        {p1:0,p2:1,key:"l1",label:"Long. haut"},
+        {p1:1,p2:2,key:"h1",label:"Haut. droite"},
+        {p1:2,p2:3,key:"l1",label:"Retrait"},
+        {p1:3,p2:4,key:"h2",label:"Haut. bas"},
+        {p1:4,p2:5,key:"l2",label:"Long. bas"},
+        {p1:5,p2:0,key:"h1",label:"Haut. gauche"},
+      ]
+    };
   }
   if(f==="U"){
-    const lt=n("lt"),ht=n("ht"),ep_g=n("ep_g"),ep_d=n("ep_d"),ep_h=n("ep_h");
-    const iw=Math.max(0.1,lt-ep_g-ep_d);
-    const ih=Math.max(0.1,ht-ep_h);
-    const pts=[
-      {x:0,    y:0},
-      {x:lt,   y:0},
-      {x:lt,   y:ht},
-      {x:lt-ep_d, y:ht},
-      {x:lt-ep_d, y:ep_h},
-      {x:ep_g, y:ep_h},
-      {x:ep_g, y:ht},
-      {x:0,    y:ht},
-    ];
-    return{pts,aretes:[
-      {p1:0,p2:1,key:"lt",   label:"Larg.ext"},
-      {p1:1,p2:2,key:"ht",   label:"Haut.dr.ext"},
-      {p1:2,p2:3,key:"ep_d", label:"Épais.dr."},
-      {p1:3,p2:4,key:"ih",   label:"Haut.int.dr."},
-      {p1:4,p2:5,key:"iw",   label:"Larg.int."},
-      {p1:5,p2:6,key:"ih2",  label:"Haut.int.ga."},
-      {p1:6,p2:7,key:"ep_g", label:"Épais.ga."},
-      {p1:7,p2:0,key:"ht2",  label:"Haut.ga.ext"},
-    ]};
+    // U = barre en haut + 2 jambes vers le bas
+    // Points dans l'ordre horaire :
+    const lt=g("lt"),ht=g("ht"),epg=g("ep_g"),epd=g("ep_d"),eph=g("ep_h");
+    const x0=0, x1=epg, x2=lt-epd, x3=lt;
+    const y0=0, y1=eph, y2=ht;
+    return{
+      pts:[
+        {x:x0,y:y0}, // 0: haut-gauche ext
+        {x:x3,y:y0}, // 1: haut-droite ext
+        {x:x3,y:y2}, // 2: bas-droite ext
+        {x:x2,y:y2}, // 3: bas-droite int (jambe droite)
+        {x:x2,y:y1}, // 4: jonction droite
+        {x:x1,y:y1}, // 5: jonction gauche
+        {x:x1,y:y2}, // 6: bas-gauche int (jambe gauche)
+        {x:x0,y:y2}, // 7: bas-gauche ext
+      ],
+      aretes:[
+        {p1:0,p2:1,key:"lt",  label:"Larg. totale"},
+        {p1:1,p2:2,key:"ht",  label:"Jambe droite ext"},
+        {p1:2,p2:3,key:"ep_d",label:"Épais. jambe dr."},
+        {p1:3,p2:4,key:"ht",  label:"Jambe droite int"},
+        {p1:4,p2:5,key:"lt",  label:"Ouverture int."},
+        {p1:5,p2:6,key:"ht",  label:"Jambe gauche int"},
+        {p1:6,p2:7,key:"ep_g",label:"Épais. jambe ga."},
+        {p1:7,p2:0,key:"ht",  label:"Jambe gauche ext"},
+      ]
+    };
+  }
+  if(f==="triangle"){
+    const b=g("base"),h=g("haut"),dec=Math.min(g("dec"),b);
+    return{
+      pts:[{x:0,y:h},{x:b,y:h},{x:dec,y:0}],
+      aretes:[
+        {p1:0,p2:1,key:"base",label:"Base"},
+        {p1:1,p2:2,key:"haut",label:"Côté droit"},
+        {p1:2,p2:0,key:"haut",label:"Côté gauche"},
+      ]
+    };
   }
   return{pts:[],aretes:[]};
 }
 
-// Clés éditables pour chaque arête
-function getKeyValue(f,d,key){
-  const n=k=>Math.max(0.1,Number(d[k]||1));
-  if(f==="U"){
-    if(key==="lt")return{k:"lt",v:n("lt")};
-    if(key==="ht"||key==="ht2")return{k:"ht",v:n("ht")};
-    if(key==="ep_d")return{k:"ep_d",v:n("ep_d")};
-    if(key==="ep_g")return{k:"ep_g",v:n("ep_g")};
-    if(key==="ep_h")return{k:"ep_h",v:n("ep_h")};
-    if(key==="ih"||key==="ih2")return{k:"ht",v:n("ht")-n("ep_h")};
-    if(key==="iw")return{k:"lt",v:n("lt")-n("ep_g")-n("ep_d")};
-  }
-  if(key==="ret")return{k:"l1",v:n("l1")-n("l2")};
-  if(key==="htot")return{k:"h1",v:n("h1")+n("h2")};
-  return{k:key,v:n(key)};
-}
-
-const CHAMPS_INIT={
-  rectangle:[{k:"w",l:"Largeur (m)"},{k:"h",l:"Hauteur (m)"}],
-  triangle:[{k:"base",l:"Base (m)"},{k:"haut",l:"Hauteur (m)"},{k:"decalage",l:"Décalage sommet (m)"}],
-  L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"h1",l:"Haut.1"},{k:"h2",l:"Haut.2"}],
-  U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep_g",l:"Épais.gauche"},{k:"ep_d",l:"Épais.droite"},{k:"ep_h",l:"Épais.haut"}],
-};
-
-const FORMES=[
-  {id:"rectangle",label:"Rectangle"},
-  {id:"triangle",label:"Triangle"},
-  {id:"L",label:"Forme L"},
-  {id:"U",label:"Forme U"},
-];
-
 function calcSurf(f,d){
-  const{pts}=buildForme(f,d);
-  if(!pts.length)return"—";
+  const{pts}=buildShape(f,d);
+  if(pts.length<3)return"—";
   let a=0;
   for(let i=0;i<pts.length;i++){
     const j=(i+1)%pts.length;
@@ -117,7 +106,7 @@ function calcSurf(f,d){
   return Math.abs(a/2).toFixed(2);
 }
 
-function dist(p1,p2){return Math.hypot(p2.x-p1.x,p2.y-p1.y);}
+function ptDist(a,b){return Math.hypot(b.x-a.x,b.y-a.y);}
 
 function PlanCanvas({forme,dims,surf,onAreteTap}){
   const cvRef=useRef();
@@ -126,7 +115,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
   const drag=useRef(false);
   const lastT=useRef(null);
   const pinch=useRef(null);
-  const hitZones=useRef([]);
+  const hits=useRef([]);
 
   const draw=useCallback(()=>{
     const cv=cvRef.current;if(!cv)return;
@@ -138,32 +127,24 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
 
     ctx.fillStyle="#f5f0e8";ctx.fillRect(0,0,CW,CH);
 
-    const{pts,aretes}=buildForme(forme,dims);
+    const{pts,aretes}=buildShape(forme,dims);
     if(!pts.length)return;
 
-    // Bounding box réelle
-    const minX=Math.min(...pts.map(p=>p.x));
-    const maxX=Math.max(...pts.map(p=>p.x));
-    const minY=Math.min(...pts.map(p=>p.y));
-    const maxY=Math.max(...pts.map(p=>p.y));
-    const rw=maxX-minX,rh=maxY-minY;
+    const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+    const minX=Math.min(...xs),maxX=Math.max(...xs);
+    const minY=Math.min(...ys),maxY=Math.max(...ys);
+    const rw=maxX-minX||1,rh=maxY-minY||1;
     const sc0=Math.min((CW-PAD*2)/rw,(CH-PAD*2)/rh);
     const sc=sc0*z;
 
-    // Origine : centre de l'écran
-    const originX=CW/2-rw*sc/2+px;
-    const originY=CH/2-rh*sc/2+py;
+    // sc = pixels par mètre → grille 1 carreau = 1m
+    const toX=x=>CW/2+(x-minX-rw/2)*sc+px;
+    const toY=y=>CH/2+(y-minY-rh/2)*sc+py;
 
-    // Convertit un point réel → pixel
-    const toScreen=p=>({
-      x:originX+(p.x-minX)*sc,
-      y:originY+(p.y-minY)*sc,
-    });
-
-    // Grille solidaire
-    const gs=sc; // 1 carreau = 1 mètre
-    const gox=((originX%gs)+gs)%gs;
-    const goy=((originY%gs)+gs)%gs;
+    // Grille solidaire (1 carreau = 1m)
+    const gs=sc;
+    const gox=((toX(minX)%gs)+gs)%gs;
+    const goy=((toY(minY)%gs)+gs)%gs;
     ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
     for(let x=gox-gs;x<CW+gs;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
     for(let y=goy-gs;y<CH+gs;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
@@ -172,19 +153,18 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     for(let y=goy-gs*5;y<CH+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
 
     // Pièce
-    const sPts=pts.map(toScreen);
     ctx.shadowColor="rgba(0,0,0,0.1)";ctx.shadowBlur=8;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;
-    ctx.beginPath();ctx.moveTo(sPts[0].x,sPts[0].y);
-    sPts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
+    ctx.beginPath();ctx.moveTo(toX(pts[0].x),toY(pts[0].y));
+    pts.slice(1).forEach(p=>ctx.lineTo(toX(p.x),toY(p.y)));
     ctx.closePath();ctx.fillStyle="rgba(255,252,235,0.97)";ctx.fill();
     ctx.shadowColor="transparent";ctx.shadowBlur=0;
-    ctx.beginPath();ctx.moveTo(sPts[0].x,sPts[0].y);
-    sPts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
+    ctx.beginPath();ctx.moveTo(toX(pts[0].x),toY(pts[0].y));
+    pts.slice(1).forEach(p=>ctx.lineTo(toX(p.x),toY(p.y)));
     ctx.closePath();ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
 
     // Surface au centre
-    const cx=sPts.reduce((s,p)=>s+p.x,0)/sPts.length;
-    const cy=sPts.reduce((s,p)=>s+p.y,0)/sPts.length;
+    const cx=pts.reduce((s,p)=>s+toX(p.x),0)/pts.length;
+    const cy=pts.reduce((s,p)=>s+toY(p.y),0)/pts.length;
     ctx.textAlign="center";ctx.font="bold 14px sans-serif";
     const st=surf+" m²";const stw=ctx.measureText(st).width+18;
     ctx.fillStyle="rgba(255,255,255,0.92)";
@@ -192,22 +172,19 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     else ctx.rect(cx-stw/2,cy-12,stw,22);
     ctx.fill();ctx.fillStyle="#c8820a";ctx.fillText(st,cx,cy+5);
 
-    // Cotes sur chaque arête
-    hitZones.current=[];
+    // Cotes — valeur = distance réelle entre les 2 points
+    hits.current=[];
     ctx.font="bold 11px sans-serif";
     aretes.forEach(ar=>{
-      const A=sPts[ar.p1],B=sPts[ar.p2];
-      const mx=(A.x+B.x)/2,my=(A.y+B.y)/2;
-      const ddx=B.x-A.x,ddy=B.y-A.y,len=Math.hypot(ddx,ddy)||1;
-      // Normale vers l'extérieur
+      const A=pts[ar.p1],B=pts[ar.p2];
+      const ax=toX(A.x),ay=toY(A.y),bx=toX(B.x),by=toY(B.y);
+      const mx=(ax+bx)/2,my=(ay+by)/2;
+      const ddx=bx-ax,ddy=by-ay,len=Math.hypot(ddx,ddy)||1;
       const nx=-ddy/len,ny=ddx/len;
-      const OFF=28;
-      const lx=mx+nx*OFF,ly=my+ny*OFF;
-
-      // Valeur réelle = distance entre les 2 points en mètres
-      const realDist=dist(pts[ar.p1],pts[ar.p2]).toFixed(2).replace(/\.00$/,"").replace(/(\.\d)0$/,"$1");
-      const val=realDist+"m";
-
+      const lx=mx+nx*30,ly=my+ny*30;
+      // Distance réelle en mètres
+      const realM=ptDist(A,B);
+      const val=realM.toFixed(1).replace(/\.0$/,"")+"m";
       ctx.setLineDash([4,3]);ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(lx,ly);ctx.stroke();ctx.setLineDash([]);
       const tw=Math.max(ctx.measureText(val).width+14,36),th=20;
@@ -217,13 +194,11 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
       else ctx.rect(lx-tw/2,ly-th/2,tw,th);
       ctx.fill();ctx.stroke();
       ctx.fillStyle="#1a5fa8";ctx.textAlign="center";ctx.fillText(val,lx,ly+4);
-
-      const kv=getKeyValue(forme,dims,ar.key);
-      hitZones.current.push({key:kv.k,label:ar.label,val:String(kv.v),x:lx-tw/2,y:ly-th/2,w:tw,h:th});
+      hits.current.push({key:ar.key,label:ar.label,val:String(Number(d[ar.key]||realM).toFixed(1)),x:lx-tw/2,y:ly-th/2,w:tw,h:th});
     });
 
     ctx.textAlign="left";
-    // Échelle = 1 carreau = 1m
+    // Échelle : 1 carreau = 1m
     ctx.strokeStyle="#999";ctx.lineWidth=1.5;ctx.setLineDash([]);
     ctx.beginPath();ctx.moveTo(12,CH-16);ctx.lineTo(12+sc,CH-16);ctx.stroke();
     ctx.beginPath();ctx.moveTo(12,CH-22);ctx.lineTo(12,CH-10);ctx.stroke();
@@ -231,6 +206,8 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     ctx.fillStyle="#999";ctx.font="11px sans-serif";ctx.fillText("1m",12+sc/2-6,CH-20);
     ctx.fillStyle="#b06010";ctx.font="bold 13px sans-serif";ctx.fillText("N↑",CW-30,22);
   },[forme,dims,surf]);
+
+  const d=dims;
 
   useEffect(()=>{
     const cv=cvRef.current;if(!cv)return;
@@ -255,9 +232,9 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
       }
       if(e.touches.length===2&&pinch.current){
         const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
-        const d=Math.hypot(dx,dy);
-        zoom.current=Math.min(10,Math.max(0.1,zoom.current*(d/pinch.current)));
-        pinch.current=d;draw();
+        const dd=Math.hypot(dx,dy);
+        zoom.current=Math.min(10,Math.max(0.1,zoom.current*(dd/pinch.current)));
+        pinch.current=dd;draw();
       }
     };
     const te=e=>{drag.current=false;pinch.current=null;
@@ -265,7 +242,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
         const r=cv.getBoundingClientRect();
         const tx=(e.changedTouches[0].clientX-r.left)*(cv.width/r.width);
         const ty=(e.changedTouches[0].clientY-r.top)*(cv.height/r.height);
-        hitZones.current.forEach(z=>{
+        hits.current.forEach(z=>{
           if(tx>=z.x&&tx<=z.x+z.w&&ty>=z.y&&ty<=z.y+z.h)onAreteTap(z);
         });
       }
@@ -280,7 +257,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
 }
 
 function EditModal({item,onSave,onClose}){
-  const[v,sv]=useState(String(Number(item.val).toFixed(2).replace(/\.00$/,"").replace(/(\.\d)0$/,"$1")));
+  const[v,sv]=useState(String(Number(item.val).toFixed(1)));
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
       <div style={{background:"#1c1f2e",borderRadius:16,padding:24,width:"100%",maxWidth:300}}>
@@ -322,7 +299,8 @@ function Plan({data,onR}){
 }
 
 function Dims({f,onV,onR}){
-  const ch=CHAMPS_INIT[f.id]||[];const[d,sd]=useState({});
+  const ch=CHAMPS_INIT[f.id]||[];
+  const[d,sd]=useState({});
   const ok=ch.every(c=>d[c.k]&&Number(d[c.k])>0);
   return(
     <div style={S.screen}>
@@ -342,8 +320,9 @@ function Dims({f,onV,onR}){
 }
 
 export default function App(){
-  const[e,se]=useState("choix");const[f,sf]=useState(null);
-  if(e==="dims")return<Dims f={f} onV={d=>{sf(d);se("plan")}} onR={()=>se("choix")}/>;
+  const[e,se]=useState("choix");
+  const[f,sf]=useState(null);
+  if(e==="dims")return<Dims f={f} onV={dd=>{sf({...f,dims:dd});se("plan")}} onR={()=>se("choix")}/>;
   if(e==="plan"&&f)return<Plan data={f} onR={()=>se("choix")}/>;
   return(
     <div style={S.screen}>
