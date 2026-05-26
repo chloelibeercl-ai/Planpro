@@ -8,41 +8,58 @@ const CHAMPS_INIT={
   U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur murs"}],
 };
 
+// Chaque arête du U a sa propre clé unique
 const LABELS={
   top:"Mur haut",right:"Mur droit",bot:"Mur bas",left:"Mur gauche",
   base:"Base",
   r1:"Larg.dr.1",mid:"Retrait",r2:"Larg.dr.2",
-  lt:"Larg.tot.",ht:"Haut.tot.",ep:"Épaisseur",
-  rout:"Mur dr. ext",br:"Mur bas dr.",rin:"Mur dr. int",inner:"Mur haut int",lin:"Mur ga. int",bl:"Mur bas ga.",lout:"Mur ga. ext"
+  u_top:"Larg. haut ext",
+  u_rout:"Haut. dr. ext",
+  u_br:"Épais. bas dr.",
+  u_rin:"Haut. int. dr.",
+  u_inner:"Larg. int.",
+  u_lin:"Haut. int. ga.",
+  u_bl:"Épais. bas ga.",
+  u_lout:"Haut. ga. ext",
 };
 
-function n(d,k){return Math.max(0.1,Number(d[k]||1));}
+function nv(d,k){return Math.max(0.1,Number(d[k]||1));}
 
 function initDims(f,r){
   const g=k=>Math.max(0.1,Number(r[k]||1));
   if(f==="libre")return{top:g("top"),right:g("right"),bot:g("bot"),left:g("left")};
   if(f==="triangle")return{base:g("base"),right:g("right"),left:g("left")};
-  if(f==="L"){const l1=g("l1"),l2=g("l2"),w1=g("w1"),w2=g("w2");return{top:l1,r1:w1,mid:Math.max(0.1,l1-l2),r2:w2,bot:l2,left:w1+w2};}
-  if(f==="U"){const lt=g("lt"),ht=g("ht"),ep=g("ep");return{lt,ht,ep};}
+  if(f==="L"){const l1=g("l1"),l2=g("l2"),w1=g("w1"),w2=g("w2");
+    return{top:l1,r1:w1,mid:Math.max(0.1,l1-l2),r2:w2,bot:l2,left:w1+w2};}
+  if(f==="U"){
+    const lt=g("lt"),ht=g("ht"),ep=g("ep");
+    const inner=Math.max(0.1,lt-2*ep);
+    const ih=Math.max(0.1,ht-ep);
+    // Chaque arête a sa propre clé unique u_xxx
+    return{u_top:lt,u_rout:ht,u_br:ep,u_rin:ih,u_inner:inner,u_lin:ih,u_bl:ep,u_lout:ht};
+  }
   return{};
 }
 
 function getRealSize(f,d){
-  if(f==="libre")return{w:Math.max(n(d,"top"),n(d,"bot")),h:Math.max(n(d,"left"),n(d,"right"))};
-  if(f==="triangle")return{w:n(d,"base"),h:Math.max(n(d,"left"),n(d,"right"))};
-  if(f==="L")return{w:n(d,"top"),h:n(d,"r1")+n(d,"r2")};
-  if(f==="U")return{w:n(d,"lt"),h:n(d,"ht")};
+  if(f==="libre")return{w:Math.max(nv(d,"top"),nv(d,"bot")),h:Math.max(nv(d,"left"),nv(d,"right"))};
+  if(f==="triangle")return{w:nv(d,"base"),h:Math.max(nv(d,"left"),nv(d,"right"))};
+  if(f==="L")return{w:nv(d,"top"),h:nv(d,"r1")+nv(d,"r2")};
+  if(f==="U"){
+    const ep=(nv(d,"u_top")-nv(d,"u_inner"))/2;
+    return{w:nv(d,"u_top"),h:nv(d,"u_rout")};
+  }
   return{w:5,h:5};
 }
 
 function getPts(f,d,ox,oy,sc){
-  const s=k=>n(d,k)*sc;
+  const s=k=>nv(d,k)*sc;
   if(f==="libre"){
     const t=s("top"),b=s("bot"),l=s("left"),r=s("right");
     return[[ox,oy],[ox+t,oy],[ox+b,oy+r],[ox,oy+l]];
   }
   if(f==="triangle"){
-    const b=s("base"),h=Math.max(n(d,"left"),n(d,"right"))*sc;
+    const b=s("base"),h=Math.max(nv(d,"left"),nv(d,"right"))*sc;
     return[[ox+b/2,oy],[ox+b,oy+h],[ox,oy+h]];
   }
   if(f==="L"){
@@ -50,25 +67,25 @@ function getPts(f,d,ox,oy,sc){
     return[[ox,oy],[ox+t,oy],[ox+t,oy+r1],[ox+t-mid,oy+r1],[ox+t-mid,oy+r1+r2],[ox,oy+r1+r2]];
   }
   if(f==="U"){
-    // Lt = largeur totale, Ht = hauteur totale, Ep = épaisseur des 3 murs
-    const W=s("lt"),H=s("ht"),E=Math.min(s("ep"),W/2.1);
-    // Forme U : 2 branches bas + barre haut
+    const W=s("u_top"),H=s("u_rout");
+    // Calcule l'épaisseur à partir de u_inner
+    const E=Math.max(2,(W-s("u_inner"))/2);
     return[
-      [ox,    oy],      // haut gauche
-      [ox+W,  oy],      // haut droite
-      [ox+W,  oy+H],    // bas droite ext
-      [ox+W-E,oy+H],    // bas droite int
-      [ox+W-E,oy+E],    // jonction droite
-      [ox+E,  oy+E],    // jonction gauche
-      [ox+E,  oy+H],    // bas gauche int
-      [ox,    oy+H],    // bas gauche ext
+      [ox,    oy],
+      [ox+W,  oy],
+      [ox+W,  oy+H],
+      [ox+W-E,oy+H],
+      [ox+W-E,oy+s("u_rin")],
+      [ox+E,  oy+s("u_lin")],
+      [ox+E,  oy+H],
+      [ox,    oy+H],
     ];
   }
   return[];
 }
 
 function getAretePts(f,d,ox,oy,sc){
-  const s=k=>n(d,k)*sc;
+  const s=k=>nv(d,k)*sc;
   const ar=[];
   if(f==="libre"){
     const t=s("top"),b=s("bot"),l=s("left"),r=s("right");
@@ -77,7 +94,7 @@ function getAretePts(f,d,ox,oy,sc){
     ar.push({key:"bot",   x1:ox,   y1:oy+l, x2:ox+b, y2:oy+r});
     ar.push({key:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+l});
   }else if(f==="triangle"){
-    const b=s("base"),h=Math.max(n(d,"left"),n(d,"right"))*sc;
+    const b=s("base"),h=Math.max(nv(d,"left"),nv(d,"right"))*sc;
     ar.push({key:"base",  x1:ox,     y1:oy+h, x2:ox+b,   y2:oy+h});
     ar.push({key:"right", x1:ox+b/2, y1:oy,   x2:ox+b,   y2:oy+h});
     ar.push({key:"left",  x1:ox,     y1:oy+h, x2:ox+b/2, y2:oy});
@@ -90,29 +107,34 @@ function getAretePts(f,d,ox,oy,sc){
     ar.push({key:"bot",  x1:ox,       y1:oy+r1+r2, x2:ox+t-mid, y2:oy+r1+r2});
     ar.push({key:"left", x1:ox,       y1:oy,       x2:ox,        y2:oy+r1+r2});
   }else if(f==="U"){
-    const W=s("lt"),H=s("ht"),E=Math.min(s("ep"),W/2.1);
-    ar.push({key:"lt", x1:ox,    y1:oy,   x2:ox+W,   y2:oy});    // haut ext
-    ar.push({key:"ht", x1:ox+W,  y1:oy,   x2:ox+W,   y2:oy+H}); // droite ext
-    ar.push({key:"ep", x1:ox+W-E,y1:oy+H, x2:ox+W,   y2:oy+H}); // bas dr
-    ar.push({key:"ht", x1:ox+W-E,y1:oy+E, x2:ox+W-E, y2:oy+H}); // droite int
-    ar.push({key:"lt", x1:ox+E,  y1:oy+E, x2:ox+W-E, y2:oy+E}); // haut int
-    ar.push({key:"ht", x1:ox+E,  y1:oy+E, x2:ox+E,   y2:oy+H}); // gauche int
-    ar.push({key:"ep", x1:ox,    y1:oy+H, x2:ox+E,   y2:oy+H}); // bas ga
-    ar.push({key:"ht", x1:ox,    y1:oy,   x2:ox,     y2:oy+H}); // gauche ext
+    // Chaque arête = clé unique u_xxx
+    const W=s("u_top"),H=s("u_rout"),E=Math.max(2,(W-s("u_inner"))/2);
+    const ri=s("u_rin"),li=s("u_lin");
+    ar.push({key:"u_top",   x1:ox,    y1:oy,    x2:ox+W,   y2:oy});
+    ar.push({key:"u_rout",  x1:ox+W,  y1:oy,    x2:ox+W,   y2:oy+H});
+    ar.push({key:"u_br",    x1:ox+W-E,y1:oy+H,  x2:ox+W,   y2:oy+H});
+    ar.push({key:"u_rin",   x1:ox+W-E,y1:oy+ri, x2:ox+W-E, y2:oy+H});
+    ar.push({key:"u_inner", x1:ox+E,  y1:oy+li, x2:ox+W-E, y2:oy+ri});
+    ar.push({key:"u_lin",   x1:ox+E,  y1:oy+li, x2:ox+E,   y2:oy+H});
+    ar.push({key:"u_bl",    x1:ox,    y1:oy+H,  x2:ox+E,   y2:oy+H});
+    ar.push({key:"u_lout",  x1:ox,    y1:oy,    x2:ox,     y2:oy+H});
   }
   return ar;
 }
 
 function calcSurf(f,d){
   if(f==="libre"){
-    const t=n(d,"top"),b=n(d,"bot"),l=n(d,"left"),r=n(d,"right");
+    const t=nv(d,"top"),b=nv(d,"bot"),l=nv(d,"left"),r=nv(d,"right");
     const pts=[[0,0],[t,0],[b,r],[0,l]];
     let a=0;for(let i=0;i<pts.length;i++){const j=(i+1)%pts.length;a+=pts[i][0]*pts[j][1]-pts[j][0]*pts[i][1];}
     return Math.abs(a/2).toFixed(2);
   }
-  if(f==="triangle")return((n(d,"base")*Math.max(n(d,"left"),n(d,"right")))/2).toFixed(2);
-  if(f==="L")return(n(d,"top")*n(d,"r1")+n(d,"bot")*n(d,"r2")).toFixed(2);
-  if(f==="U"){const lt=n(d,"lt"),ht=n(d,"ht"),ep=n(d,"ep");const iw=Math.max(0,lt-2*ep),ih=Math.max(0,ht-ep);return(lt*ht-iw*ih).toFixed(2);}
+  if(f==="triangle")return((nv(d,"base")*Math.max(nv(d,"left"),nv(d,"right")))/2).toFixed(2);
+  if(f==="L")return(nv(d,"top")*nv(d,"r1")+nv(d,"bot")*nv(d,"r2")).toFixed(2);
+  if(f==="U"){
+    const W=nv(d,"u_top"),H=nv(d,"u_rout"),iw=nv(d,"u_inner"),ih=Math.max(nv(d,"u_rin"),nv(d,"u_lin"));
+    return Math.max(0,W*H-iw*ih).toFixed(2);
+  }
   return"—";
 }
 
@@ -132,28 +154,22 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     ctx.clearRect(0,0,W,H);
     const z=zoom.current,px=pan.current.x,py=pan.current.y;
     const PAD=80;
-
     ctx.fillStyle="#f5f0e8";ctx.fillRect(0,0,W,H);
-
     const gs=40*z;
     const rs=getRealSize(forme,dims);
     const sc0=Math.min((W-PAD*2)/rs.w,(H-PAD*2)/rs.h);
     const sc=sc0*z;
-    const planX=W/2-rs.w*sc/2+px;
-    const planY=H/2-rs.h*sc/2+py;
+    const planX=W/2-rs.w*sc/2+px,planY=H/2-rs.h*sc/2+py;
     const gox=((planX%gs)+gs)%gs,goy=((planY%gs)+gs)%gs;
-
     ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
     for(let x=gox-gs;x<W+gs;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
     for(let y=goy-gs;y<H+gs;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
     ctx.strokeStyle="#ccc8bc";ctx.lineWidth=1.2;
     for(let x=gox-gs*5;x<W+gs*5;x+=gs*5){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
     for(let y=goy-gs*5;y<H+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-
     const ox=planX,oy=planY;
     const pts=getPts(forme,dims,ox,oy,sc);
     if(!pts.length)return;
-
     ctx.shadowColor="rgba(0,0,0,0.1)";ctx.shadowBlur=8;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;
     ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
@@ -162,16 +178,13 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
     ctx.closePath();ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
-
     const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length;
     const cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
     ctx.textAlign="center";ctx.font="bold 14px sans-serif";
     const st=surf+" m²";const stw=ctx.measureText(st).width+18;
     ctx.fillStyle="rgba(255,255,255,0.92)";
-    if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);
-    else ctx.rect(cx-stw/2,cy-12,stw,22);
+    if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);else ctx.rect(cx-stw/2,cy-12,stw,22);
     ctx.fill();ctx.fillStyle="#c8820a";ctx.fillText(st,cx,cy+5);
-
     hitZones.current=[];
     ctx.font="bold 11px sans-serif";
     getAretePts(forme,dims,ox,oy,sc).forEach(ar=>{
@@ -186,13 +199,11 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
       const tw=Math.max(ctx.measureText(val).width+14,36),th=20;
       ctx.fillStyle="#e8f4ff";ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1.5;
       ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);
-      else ctx.rect(lx-tw/2,ly-th/2,tw,th);
+      if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);else ctx.rect(lx-tw/2,ly-th/2,tw,th);
       ctx.fill();ctx.stroke();
       ctx.fillStyle="#1a5fa8";ctx.textAlign="center";ctx.fillText(val,lx,ly+4);
       hitZones.current.push({key,label:LABELS[key]||key,val:String(dims[key]||1),x:lx-tw/2,y:ly-th/2,w:tw,h:th});
     });
-
     ctx.textAlign="left";
     const bLen=sc*2;
     ctx.strokeStyle="#999";ctx.lineWidth=1.5;ctx.setLineDash([]);
@@ -210,7 +221,6 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     return()=>window.removeEventListener("resize",resize);
   },[draw]);
   useEffect(()=>{draw();},[draw]);
-
   useEffect(()=>{
     const cv=cvRef.current;if(!cv)return;
     let moved=false;
