@@ -5,78 +5,84 @@ const CHAMPS_INIT={
   libre:[{k:"top",l:"Mur haut (m)"},{k:"right",l:"Mur droit (m)"},{k:"bot",l:"Mur bas (m)"},{k:"left",l:"Mur gauche (m)"}],
   triangle:[{k:"base",l:"Base (m)"},{k:"right",l:"Côté droit (m)"},{k:"left",l:"Côté gauche (m)"}],
   L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"w1",l:"Larg.1"},{k:"w2",l:"Larg.2"}],
-  U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur"}],
+  U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur murs"}],
 };
 
 const LABELS={
   top:"Mur haut",right:"Mur droit",bot:"Mur bas",left:"Mur gauche",
   base:"Base",
   r1:"Larg.dr.1",mid:"Retrait",r2:"Larg.dr.2",
-  rout:"Haut.dr.",br:"Épais.dr.",rin:"Haut.int.dr.",inner:"Larg.int.",lin:"Haut.int.ga.",bl:"Épais.ga.",lout:"Haut.ga."
+  lt:"Larg.tot.",ht:"Haut.tot.",ep:"Épaisseur",
+  rout:"Mur dr. ext",br:"Mur bas dr.",rin:"Mur dr. int",inner:"Mur haut int",lin:"Mur ga. int",bl:"Mur bas ga.",lout:"Mur ga. ext"
 };
 
+function n(d,k){return Math.max(0.1,Number(d[k]||1));}
+
 function initDims(f,r){
-  const n=k=>Math.max(0.1,Number(r[k]||1));
-  if(f==="libre")return{top:n("top"),right:n("right"),bot:n("bot"),left:n("left")};
-  if(f==="triangle")return{base:n("base"),right:n("right"),left:n("left")};
-  if(f==="L"){const l1=n("l1"),l2=n("l2"),w1=n("w1"),w2=n("w2");return{top:l1,r1:w1,mid:Math.max(0.1,l1-l2),r2:w2,bot:l2,left:w1+w2};}
-  if(f==="U"){const lt=n("lt"),ht=n("ht"),ep=n("ep");return{top:lt,rout:ht,br:ep,rin:Math.max(0.1,ht-ep),inner:Math.max(0.1,lt-2*ep),lin:Math.max(0.1,ht-ep),bl:ep,lout:ht};}
+  const g=k=>Math.max(0.1,Number(r[k]||1));
+  if(f==="libre")return{top:g("top"),right:g("right"),bot:g("bot"),left:g("left")};
+  if(f==="triangle")return{base:g("base"),right:g("right"),left:g("left")};
+  if(f==="L"){const l1=g("l1"),l2=g("l2"),w1=g("w1"),w2=g("w2");return{top:l1,r1:w1,mid:Math.max(0.1,l1-l2),r2:w2,bot:l2,left:w1+w2};}
+  if(f==="U"){const lt=g("lt"),ht=g("ht"),ep=g("ep");return{lt,ht,ep};}
   return{};
 }
 
-function v(d,k){return Math.max(0.1,Number(d[k]||1));}
+function getRealSize(f,d){
+  if(f==="libre")return{w:Math.max(n(d,"top"),n(d,"bot")),h:Math.max(n(d,"left"),n(d,"right"))};
+  if(f==="triangle")return{w:n(d,"base"),h:Math.max(n(d,"left"),n(d,"right"))};
+  if(f==="L")return{w:n(d,"top"),h:n(d,"r1")+n(d,"r2")};
+  if(f==="U")return{w:n(d,"lt"),h:n(d,"ht")};
+  return{w:5,h:5};
+}
 
-// Dessin forme libre = quadrilatère avec 4 murs indépendants
-// top=largeur haut, bot=largeur bas, left=hauteur gauche, right=hauteur droite
 function getPts(f,d,ox,oy,sc){
+  const s=k=>n(d,k)*sc;
   if(f==="libre"){
-    const t=v(d,"top")*sc,b=v(d,"bot")*sc,l=v(d,"left")*sc,r=v(d,"right")*sc;
-    // Coin haut-gauche = ox,oy
-    // Coin haut-droit = ox+t, oy
-    // Coin bas-droit = ox+b, oy+r  (bas aligné à gauche, hauteur droite)
-    // Coin bas-gauche = ox, oy+l
+    const t=s("top"),b=s("bot"),l=s("left"),r=s("right");
     return[[ox,oy],[ox+t,oy],[ox+b,oy+r],[ox,oy+l]];
   }
   if(f==="triangle"){
-    const b=v(d,"base")*sc,h=Math.max(v(d,"left"),v(d,"right"))*sc;
+    const b=s("base"),h=Math.max(n(d,"left"),n(d,"right"))*sc;
     return[[ox+b/2,oy],[ox+b,oy+h],[ox,oy+h]];
   }
   if(f==="L"){
-    const t=v(d,"top")*sc,r1=v(d,"r1")*sc,mid=v(d,"mid")*sc,r2=v(d,"r2")*sc,bot=v(d,"bot")*sc;
+    const t=s("top"),r1=s("r1"),mid=s("mid"),r2=s("r2");
     return[[ox,oy],[ox+t,oy],[ox+t,oy+r1],[ox+t-mid,oy+r1],[ox+t-mid,oy+r1+r2],[ox,oy+r1+r2]];
   }
   if(f==="U"){
-    const t=v(d,"top")*sc,ro=v(d,"rout")*sc,ri=v(d,"rin")*sc,iw=v(d,"inner")*sc;
-    const ep=(v(d,"top")-v(d,"inner"))/2*sc;
-    return[[ox,oy],[ox+t,oy],[ox+t,oy+ro],[ox+t-ep,oy+ro],[ox+t-ep,oy+ro-ri],[ox+ep,oy+ro-ri],[ox+ep,oy+ro],[ox,oy+ro]];
+    // Lt = largeur totale, Ht = hauteur totale, Ep = épaisseur des 3 murs
+    const W=s("lt"),H=s("ht"),E=Math.min(s("ep"),W/2.1);
+    // Forme U : 2 branches bas + barre haut
+    return[
+      [ox,    oy],      // haut gauche
+      [ox+W,  oy],      // haut droite
+      [ox+W,  oy+H],    // bas droite ext
+      [ox+W-E,oy+H],    // bas droite int
+      [ox+W-E,oy+E],    // jonction droite
+      [ox+E,  oy+E],    // jonction gauche
+      [ox+E,  oy+H],    // bas gauche int
+      [ox,    oy+H],    // bas gauche ext
+    ];
   }
   return[];
 }
 
-function getRealSize(f,d){
-  if(f==="libre")return{w:Math.max(v(d,"top"),v(d,"bot")),h:Math.max(v(d,"left"),v(d,"right"))};
-  if(f==="triangle")return{w:v(d,"base"),h:Math.max(v(d,"left"),v(d,"right"))};
-  if(f==="L")return{w:v(d,"top"),h:v(d,"r1")+v(d,"r2")};
-  if(f==="U")return{w:v(d,"top"),h:v(d,"rout")};
-  return{w:5,h:5};
-}
-
 function getAretePts(f,d,ox,oy,sc){
+  const s=k=>n(d,k)*sc;
   const ar=[];
   if(f==="libre"){
-    const t=v(d,"top")*sc,b=v(d,"bot")*sc,l=v(d,"left")*sc,r=v(d,"right")*sc;
-    const pts=[[ox,oy],[ox+t,oy],[ox+b,oy+r],[ox,oy+l]];
-    ar.push({key:"top",   x1:pts[0][0],y1:pts[0][1],x2:pts[1][0],y2:pts[1][1]});
-    ar.push({key:"right", x1:pts[1][0],y1:pts[1][1],x2:pts[2][0],y2:pts[2][1]});
-    ar.push({key:"bot",   x1:pts[3][0],y1:pts[3][1],x2:pts[2][0],y2:pts[2][1]});
-    ar.push({key:"left",  x1:pts[0][0],y1:pts[0][1],x2:pts[3][0],y2:pts[3][1]});
+    const t=s("top"),b=s("bot"),l=s("left"),r=s("right");
+    ar.push({key:"top",   x1:ox,   y1:oy,   x2:ox+t, y2:oy});
+    ar.push({key:"right", x1:ox+t, y1:oy,   x2:ox+b, y2:oy+r});
+    ar.push({key:"bot",   x1:ox,   y1:oy+l, x2:ox+b, y2:oy+r});
+    ar.push({key:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+l});
   }else if(f==="triangle"){
-    const b=v(d,"base")*sc,h=Math.max(v(d,"left"),v(d,"right"))*sc;
+    const b=s("base"),h=Math.max(n(d,"left"),n(d,"right"))*sc;
     ar.push({key:"base",  x1:ox,     y1:oy+h, x2:ox+b,   y2:oy+h});
     ar.push({key:"right", x1:ox+b/2, y1:oy,   x2:ox+b,   y2:oy+h});
     ar.push({key:"left",  x1:ox,     y1:oy+h, x2:ox+b/2, y2:oy});
   }else if(f==="L"){
-    const t=v(d,"top")*sc,r1=v(d,"r1")*sc,mid=v(d,"mid")*sc,r2=v(d,"r2")*sc,bot=v(d,"bot")*sc;
+    const t=s("top"),r1=s("r1"),mid=s("mid"),r2=s("r2"),bot=s("bot");
     ar.push({key:"top",  x1:ox,       y1:oy,       x2:ox+t,     y2:oy});
     ar.push({key:"r1",   x1:ox+t,     y1:oy,       x2:ox+t,     y2:oy+r1});
     ar.push({key:"mid",  x1:ox+t-mid, y1:oy+r1,    x2:ox+t,     y2:oy+r1});
@@ -84,32 +90,29 @@ function getAretePts(f,d,ox,oy,sc){
     ar.push({key:"bot",  x1:ox,       y1:oy+r1+r2, x2:ox+t-mid, y2:oy+r1+r2});
     ar.push({key:"left", x1:ox,       y1:oy,       x2:ox,        y2:oy+r1+r2});
   }else if(f==="U"){
-    const t=v(d,"top")*sc,ro=v(d,"rout")*sc,ri=v(d,"rin")*sc;
-    const ep=(v(d,"top")-v(d,"inner"))/2*sc;
-    ar.push({key:"top",   x1:ox,      y1:oy,       x2:ox+t,    y2:oy});
-    ar.push({key:"rout",  x1:ox+t,    y1:oy,       x2:ox+t,    y2:oy+ro});
-    ar.push({key:"br",    x1:ox+t-ep, y1:oy+ro,    x2:ox+t,    y2:oy+ro});
-    ar.push({key:"rin",   x1:ox+t-ep, y1:oy+ro-ri, x2:ox+t-ep, y2:oy+ro});
-    ar.push({key:"inner", x1:ox+ep,   y1:oy+ro-ri, x2:ox+t-ep, y2:oy+ro-ri});
-    ar.push({key:"lin",   x1:ox+ep,   y1:oy+ro-ri, x2:ox+ep,   y2:oy+ro});
-    ar.push({key:"bl",    x1:ox,      y1:oy+ro,    x2:ox+ep,   y2:oy+ro});
-    ar.push({key:"lout",  x1:ox,      y1:oy,       x2:ox,      y2:oy+ro});
+    const W=s("lt"),H=s("ht"),E=Math.min(s("ep"),W/2.1);
+    ar.push({key:"lt", x1:ox,    y1:oy,   x2:ox+W,   y2:oy});    // haut ext
+    ar.push({key:"ht", x1:ox+W,  y1:oy,   x2:ox+W,   y2:oy+H}); // droite ext
+    ar.push({key:"ep", x1:ox+W-E,y1:oy+H, x2:ox+W,   y2:oy+H}); // bas dr
+    ar.push({key:"ht", x1:ox+W-E,y1:oy+E, x2:ox+W-E, y2:oy+H}); // droite int
+    ar.push({key:"lt", x1:ox+E,  y1:oy+E, x2:ox+W-E, y2:oy+E}); // haut int
+    ar.push({key:"ht", x1:ox+E,  y1:oy+E, x2:ox+E,   y2:oy+H}); // gauche int
+    ar.push({key:"ep", x1:ox,    y1:oy+H, x2:ox+E,   y2:oy+H}); // bas ga
+    ar.push({key:"ht", x1:ox,    y1:oy,   x2:ox,     y2:oy+H}); // gauche ext
   }
   return ar;
 }
 
 function calcSurf(f,d){
   if(f==="libre"){
-    // Formule du quadrilatère (shoelace)
-    const t=v(d,"top"),b=v(d,"bot"),l=v(d,"left"),r=v(d,"right");
+    const t=n(d,"top"),b=n(d,"bot"),l=n(d,"left"),r=n(d,"right");
     const pts=[[0,0],[t,0],[b,r],[0,l]];
-    let area=0;
-    for(let i=0;i<pts.length;i++){const j=(i+1)%pts.length;area+=pts[i][0]*pts[j][1]-pts[j][0]*pts[i][1];}
-    return Math.abs(area/2).toFixed(2);
+    let a=0;for(let i=0;i<pts.length;i++){const j=(i+1)%pts.length;a+=pts[i][0]*pts[j][1]-pts[j][0]*pts[i][1];}
+    return Math.abs(a/2).toFixed(2);
   }
-  if(f==="triangle")return((v(d,"base")*Math.max(v(d,"left"),v(d,"right")))/2).toFixed(2);
-  if(f==="L")return(v(d,"top")*v(d,"r1")+v(d,"bot")*v(d,"r2")).toFixed(2);
-  if(f==="U")return(v(d,"top")*v(d,"rout")-v(d,"inner")*v(d,"rin")).toFixed(2);
+  if(f==="triangle")return((n(d,"base")*Math.max(n(d,"left"),n(d,"right")))/2).toFixed(2);
+  if(f==="L")return(n(d,"top")*n(d,"r1")+n(d,"bot")*n(d,"r2")).toFixed(2);
+  if(f==="U"){const lt=n(d,"lt"),ht=n(d,"ht"),ep=n(d,"ep");const iw=Math.max(0,lt-2*ep),ih=Math.max(0,ht-ep);return(lt*ht-iw*ih).toFixed(2);}
   return"—";
 }
 
@@ -160,7 +163,6 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
     ctx.closePath();ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
 
-    // Surface centre
     const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length;
     const cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
     ctx.textAlign="center";ctx.font="bold 14px sans-serif";
@@ -170,7 +172,6 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     else ctx.rect(cx-stw/2,cy-12,stw,22);
     ctx.fill();ctx.fillStyle="#c8820a";ctx.fillText(st,cx,cy+5);
 
-    // Cotes indépendantes
     hitZones.current=[];
     ctx.font="bold 11px sans-serif";
     getAretePts(forme,dims,ox,oy,sc).forEach(ar=>{
