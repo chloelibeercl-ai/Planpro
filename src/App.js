@@ -1,19 +1,71 @@
 import{useState,useRef,useEffect,useCallback}from"react";
 const F=[{id:"carre",label:"Carré"},{id:"rectangle",label:"Rectangle"},{id:"triangle",label:"Triangle"},{id:"U",label:"Forme U"},{id:"L",label:"Forme L"}];
-const CHAMPS={carre:[{k:"cote",l:"Côté (m)"}],rectangle:[{k:"lon",l:"Longueur"},{k:"lar",l:"Largeur"}],triangle:[{k:"base",l:"Base"},{k:"haut",l:"Hauteur"}],L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"w1",l:"Larg.1"},{k:"w2",l:"Larg.2"}],U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur"}]};
+
+const CHAMPS={
+  carre:[{k:"cote",l:"Côté (m)"}],
+  rectangle:[{k:"lon",l:"Longueur"},{k:"lar",l:"Largeur"}],
+  triangle:[{k:"base",l:"Base"},{k:"haut",l:"Hauteur"}],
+  L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"w1",l:"Larg.1"},{k:"w2",l:"Larg.2"}],
+  U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur"}]
+};
+
+// Chaque arête a un id unique et une key éditable
+function getAretes(f,d,ox,oy,sc){
+  const n=k=>Math.max(0.1,Number(d[k]||1));
+  const m=k=>n(k).toFixed(1).replace(/\.0$/,"")+"m";
+  const ar=[];
+  if(f==="carre"){
+    const s=n("cote")*sc;
+    ar.push({id:"top",   x1:ox,   y1:oy,   x2:ox+s, y2:oy,   lbl:m("cote"),key:"cote"});
+    ar.push({id:"right", x1:ox+s, y1:oy,   x2:ox+s, y2:oy+s, lbl:m("cote"),key:"cote"});
+    ar.push({id:"bot",   x1:ox,   y1:oy+s, x2:ox+s, y2:oy+s, lbl:m("cote"),key:"cote"});
+    ar.push({id:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+s, lbl:m("cote"),key:"cote"});
+  }else if(f==="rectangle"){
+    const w=n("lon")*sc,h=n("lar")*sc;
+    ar.push({id:"top",   x1:ox,   y1:oy,   x2:ox+w, y2:oy,   lbl:m("lon"),key:"lon"});
+    ar.push({id:"right", x1:ox+w, y1:oy,   x2:ox+w, y2:oy+h, lbl:m("lar"),key:"lar"});
+    ar.push({id:"bot",   x1:ox,   y1:oy+h, x2:ox+w, y2:oy+h, lbl:m("lon"),key:"lon"});
+    ar.push({id:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+h, lbl:m("lar"),key:"lar"});
+  }else if(f==="triangle"){
+    const b=n("base")*sc,h=n("haut")*sc;
+    ar.push({id:"base",  x1:ox,     y1:oy+h, x2:ox+b,   y2:oy+h, lbl:m("base"),key:"base"});
+    ar.push({id:"right", x1:ox+b/2, y1:oy,   x2:ox+b,   y2:oy+h, lbl:m("haut"),key:"haut"});
+    ar.push({id:"left",  x1:ox,     y1:oy+h, x2:ox+b/2, y2:oy,   lbl:m("haut"),key:"haut"});
+  }else if(f==="L"){
+    const a=n("l1")*sc,b=n("l2")*sc,c=n("w1")*sc,e=n("w2")*sc;
+    const htot=(n("w1")+n("w2")).toFixed(1).replace(/\.0$/,"")+"m";
+    const diff=Math.abs(n("l1")-n("l2")).toFixed(1).replace(/\.0$/,"")+"m";
+    ar.push({id:"top",    x1:ox,   y1:oy,     x2:ox+a, y2:oy,     lbl:m("l1"), key:"l1"});
+    ar.push({id:"r1",     x1:ox+a, y1:oy,     x2:ox+a, y2:oy+c,   lbl:m("w1"), key:"w1"});
+    ar.push({id:"mid",    x1:ox+b, y1:oy+c,   x2:ox+a, y2:oy+c,   lbl:diff,    key:"l2"});
+    ar.push({id:"r2",     x1:ox+b, y1:oy+c,   x2:ox+b, y2:oy+c+e, lbl:m("w2"), key:"w2"});
+    ar.push({id:"bot",    x1:ox,   y1:oy+c+e, x2:ox+b, y2:oy+c+e, lbl:m("l2"), key:"l2"});
+    ar.push({id:"left",   x1:ox,   y1:oy,     x2:ox,   y2:oy+c+e, lbl:htot,    key:"w1"});
+  }else if(f==="U"){
+    const lt=n("lt"),ht=n("ht"),ep=n("ep");
+    const W=lt*sc,H=ht*sc,E=Math.min(ep*sc,W/2-2,H-2);
+    const iw=Math.max(0,lt-2*ep).toFixed(1).replace(/\.0$/,"")+"m";
+    const ih=Math.max(0,ht-ep).toFixed(1).replace(/\.0$/,"")+"m";
+    const epL=ep.toFixed(1).replace(/\.0$/,"")+"m";
+    ar.push({id:"top",  x1:ox,     y1:oy,   x2:ox+W,   y2:oy,   lbl:m("lt"), key:"lt"});
+    ar.push({id:"r_out",x1:ox+W,   y1:oy,   x2:ox+W,   y2:oy+H, lbl:m("ht"), key:"ht"});
+    ar.push({id:"br",   x1:ox+W-E, y1:oy+H, x2:ox+W,   y2:oy+H, lbl:epL,     key:"ep"});
+    ar.push({id:"r_in", x1:ox+W-E, y1:oy+E, x2:ox+W-E, y2:oy+H, lbl:ih,      key:"ht"});
+    ar.push({id:"inner",x1:ox+E,   y1:oy+E, x2:ox+W-E, y2:oy+E, lbl:iw,      key:"lt"});
+    ar.push({id:"l_in", x1:ox+E,   y1:oy+E, x2:ox+E,   y2:oy+H, lbl:ih,      key:"ht"});
+    ar.push({id:"bl",   x1:ox,     y1:oy+H, x2:ox+E,   y2:oy+H, lbl:epL,     key:"ep"});
+    ar.push({id:"l_out",x1:ox,     y1:oy,   x2:ox,     y2:oy+H, lbl:m("ht"), key:"ht"});
+  }
+  return ar;
+}
 
 function calcSurf(f,d){
-  const n=k=>Math.max(0.1,Number(d[k]||0));
+  const n=k=>Math.max(0,Number(d[k]||0));
   if(f==="carre")return(n("cote")**2).toFixed(2);
   if(f==="rectangle")return(n("lon")*n("lar")).toFixed(2);
   if(f==="triangle")return((n("base")*n("haut"))/2).toFixed(2);
   if(f==="L")return(n("l1")*n("w1")+n("l2")*n("w2")).toFixed(2);
-  if(f==="U"){
-    const lt=n("lt"),ht=n("ht"),ep=n("ep");
-    const inner_w=Math.max(0,lt-2*ep);
-    const inner_h=Math.max(0,ht-ep);
-    return(lt*ht - inner_w*inner_h).toFixed(2);
-  }
+  if(f==="U"){const lt=n("lt"),ht=n("ht"),ep=n("ep");return(lt*ht-Math.max(0,lt-2*ep)*Math.max(0,ht-ep)).toFixed(2);}
   return"—";
 }
 
@@ -33,60 +85,11 @@ function getPts(f,d,ox,oy,sc){
   if(f==="rectangle"){const w=n("lon")*sc,h=n("lar")*sc;return[[ox,oy],[ox+w,oy],[ox+w,oy+h],[ox,oy+h]];}
   if(f==="triangle"){const b=n("base")*sc,h=n("haut")*sc;return[[ox+b/2,oy],[ox+b,oy+h],[ox,oy+h]];}
   if(f==="L"){const a=n("l1")*sc,b=n("l2")*sc,c=n("w1")*sc,e=n("w2")*sc;return[[ox,oy],[ox+a,oy],[ox+a,oy+c],[ox+b,oy+c],[ox+b,oy+c+e],[ox,oy+c+e]];}
-  if(f==="U"){const W=n("lt")*sc,H=n("ht")*sc,E=Math.min(n("ep")*sc,W/2-1,H-1);return[[ox,oy],[ox+W,oy],[ox+W,oy+H],[ox+W-E,oy+H],[ox+W-E,oy+E],[ox+E,oy+E],[ox+E,oy+H],[ox,oy+H]];}
+  if(f==="U"){const W=n("lt")*sc,H=n("ht")*sc,E=Math.min(n("ep")*sc,W/2-2,H-2);return[[ox,oy],[ox+W,oy],[ox+W,oy+H],[ox+W-E,oy+H],[ox+W-E,oy+E],[ox+E,oy+E],[ox+E,oy+H],[ox,oy+H]];}
   return[];
 }
 
-function getAretes(f,d,ox,oy,sc){
-  const n=k=>Math.max(0.1,Number(d[k]||1));
-  const v=k=>n(k).toFixed(1).replace(".0","")+"m";
-  const ar=[];
-  if(f==="carre"){
-    const s=n("cote")*sc;
-    ar.push({x1:ox,y1:oy,x2:ox+s,y2:oy,lbl:v("cote"),key:"cote"});
-    ar.push({x1:ox+s,y1:oy,x2:ox+s,y2:oy+s,lbl:v("cote"),key:"cote"});
-    ar.push({x1:ox,y1:oy+s,x2:ox+s,y2:oy+s,lbl:v("cote"),key:"cote"});
-    ar.push({x1:ox,y1:oy,x2:ox,y2:oy+s,lbl:v("cote"),key:"cote"});
-  }else if(f==="rectangle"){
-    const w=n("lon")*sc,h=n("lar")*sc;
-    ar.push({x1:ox,y1:oy,x2:ox+w,y2:oy,lbl:v("lon"),key:"lon"});
-    ar.push({x1:ox+w,y1:oy,x2:ox+w,y2:oy+h,lbl:v("lar"),key:"lar"});
-    ar.push({x1:ox,y1:oy+h,x2:ox+w,y2:oy+h,lbl:v("lon"),key:"lon"});
-    ar.push({x1:ox,y1:oy,x2:ox,y2:oy+h,lbl:v("lar"),key:"lar"});
-  }else if(f==="triangle"){
-    const b=n("base")*sc,h=n("haut")*sc;
-    ar.push({x1:ox,y1:oy+h,x2:ox+b,y2:oy+h,lbl:v("base"),key:"base"});
-    ar.push({x1:ox+b/2,y1:oy,x2:ox+b,y2:oy+h,lbl:v("haut"),key:"haut"});
-    ar.push({x1:ox,y1:oy+h,x2:ox+b/2,y2:oy,lbl:v("haut"),key:"haut"});
-  }else if(f==="L"){
-    const a=n("l1")*sc,b=n("l2")*sc,c=n("w1")*sc,e=n("w2")*sc;
-    const diff_l=(n("l1")-n("l2")).toFixed(1).replace(".0","")+"m";
-    ar.push({x1:ox,y1:oy,x2:ox+a,y2:oy,lbl:v("l1"),key:"l1"});
-    ar.push({x1:ox+a,y1:oy,x2:ox+a,y2:oy+c,lbl:v("w1"),key:"w1"});
-    ar.push({x1:ox+b,y1:oy+c,x2:ox+a,y2:oy+c,lbl:diff_l,key:"l1"});
-    ar.push({x1:ox+b,y1:oy+c,x2:ox+b,y2:oy+c+e,lbl:v("w2"),key:"w2"});
-    ar.push({x1:ox,y1:oy+c+e,x2:ox+b,y2:oy+c+e,lbl:v("l2"),key:"l2"});
-    ar.push({x1:ox,y1:oy,x2:ox,y2:oy+c+e,lbl:(n("w1")+n("w2")).toFixed(1).replace(".0","")+"m",key:"w1"});
-  }else if(f==="U"){
-    const lt=n("lt"),ht=n("ht"),ep=n("ep");
-    const W=lt*sc,H=ht*sc,E=Math.min(ep*sc,W/2-1,H-1);
-    const inner_w=(lt-2*ep).toFixed(1).replace(".0","")+"m";
-    const inner_h=(ht-ep).toFixed(1).replace(".0","")+"m";
-    const epL=ep.toFixed(1).replace(".0","")+"m";
-    // 8 arêtes du U
-    ar.push({x1:ox,y1:oy,x2:ox+W,y2:oy,lbl:v("lt"),key:"lt"});           // haut total
-    ar.push({x1:ox+W,y1:oy,x2:ox+W,y2:oy+H,lbl:v("ht"),key:"ht"});       // droite
-    ar.push({x1:ox+W-E,y1:oy+H,x2:ox+W,y2:oy+H,lbl:epL,key:"ep"});       // bas droite
-    ar.push({x1:ox+W-E,y1:oy+E,x2:ox+W-E,y2:oy+H,lbl:inner_h,key:"ht"}); // intérieur droite
-    ar.push({x1:ox+E,y1:oy+E,x2:ox+W-E,y2:oy+E,lbl:inner_w,key:"lt"});   // intérieur haut
-    ar.push({x1:ox+E,y1:oy+E,x2:ox+E,y2:oy+H,lbl:inner_h,key:"ht"});     // intérieur gauche
-    ar.push({x1:ox,y1:oy+H,x2:ox+E,y2:oy+H,lbl:epL,key:"ep"});            // bas gauche
-    ar.push({x1:ox,y1:oy,x2:ox,y2:oy+H,lbl:v("ht"),key:"ht"});            // gauche
-  }
-  return ar;
-}
-
-function PlanCanvas({forme,dims,surf,onDimTap}){
+function PlanCanvas({forme,dims,surf,onAreteTap}){
   const cvRef=useRef();
   const zoom=useRef(1);
   const pan=useRef({x:0,y:0});
@@ -101,18 +104,16 @@ function PlanCanvas({forme,dims,surf,onDimTap}){
     const ctx=cv.getContext("2d");
     ctx.clearRect(0,0,W,H);
     const z=zoom.current,px=pan.current.x,py=pan.current.y;
-    const PAD=75;const BASE_GS=40;
+    const PAD=75;
 
     ctx.fillStyle="#f5f0e8";ctx.fillRect(0,0,W,H);
 
-    // Grille solidaire
-    const gs=BASE_GS*z;
+    const gs=40*z;
     const rs=getRealSize(forme,dims);
     const sc0=Math.min((W-PAD*2)/rs.w,(H-PAD*2)/rs.h);
     const sc=sc0*z;
-    const planW=rs.w*sc,planH=rs.h*sc;
-    const planX=W/2-planW/2+px;
-    const planY=H/2-planH/2+py;
+    const planX=W/2-rs.w*sc/2+px;
+    const planY=H/2-rs.h*sc/2+py;
     const gox=((planX%gs)+gs)%gs,goy=((planY%gs)+gs)%gs;
 
     ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
@@ -122,7 +123,6 @@ function PlanCanvas({forme,dims,surf,onDimTap}){
     for(let x=gox-gs*5;x<W+gs*5;x+=gs*5){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
     for(let y=goy-gs*5;y<H+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
 
-    // Pièce
     const ox=planX,oy=planY;
     const pts=getPts(forme,dims,ox,oy,sc);
     if(!pts.length)return;
@@ -145,41 +145,38 @@ function PlanCanvas({forme,dims,surf,onDimTap}){
     ctx.fillStyle="rgba(255,255,255,0.9)";
     if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);
     else ctx.rect(cx-stw/2,cy-12,stw,22);
-    ctx.fill();
-    ctx.fillStyle="#c8820a";ctx.fillText(st,cx,cy+5);
+    ctx.fill();ctx.fillStyle="#c8820a";ctx.fillText(st,cx,cy+5);
 
-    // Cotes sur chaque arête
+    // Cotes — chaque arête indépendante
     hitZones.current=[];
     ctx.font="bold 11px sans-serif";
     const aretes=getAretes(forme,dims,ox,oy,sc);
 
     aretes.forEach(ar=>{
-      const{x1,y1,x2,y2,lbl,key}=ar;
-      if(Math.abs(x2-x1)<2&&Math.abs(y2-y1)<2)return; // ignorer arêtes nulles
+      const{id,x1,y1,x2,y2,lbl,key}=ar;
+      if(Math.hypot(x2-x1,y2-y1)<4)return;
       const mx=(x1+x2)/2,my=(y1+y2)/2;
-      const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy)||1;
-      // Normale vers l'extérieur (décalage fixe)
+      const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy)||1;
       const nx=-dy/len,ny=dx/len;
-      const OFF=24;
+      const OFF=26;
       const lx=mx+nx*OFF,ly=my+ny*OFF;
 
       ctx.setLineDash([4,3]);ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(lx,ly);ctx.stroke();
       ctx.setLineDash([]);
 
-      const tw=Math.max(ctx.measureText(lbl).width+14,32),th=18;
+      const tw=Math.max(ctx.measureText(lbl).width+14,32),th=20;
       ctx.fillStyle="#e8f4ff";ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1.5;
       ctx.beginPath();
       if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);
       else ctx.rect(lx-tw/2,ly-th/2,tw,th);
       ctx.fill();ctx.stroke();
       ctx.fillStyle="#1a5fa8";ctx.textAlign="center";ctx.fillText(lbl,lx,ly+4);
-      hitZones.current.push({x:lx-tw/2,y:ly-th/2,w:tw,h:th,key});
+      // id unique pour chaque arête
+      hitZones.current.push({id,key,lbl,x:lx-tw/2,y:ly-th/2,w:tw,h:th});
     });
 
     ctx.textAlign="left";
-
-    // Barre échelle
     const bLen=sc*2;
     ctx.strokeStyle="#999";ctx.lineWidth=1.5;ctx.setLineDash([]);
     ctx.beginPath();ctx.moveTo(12,H-16);ctx.lineTo(12+bLen,H-16);ctx.stroke();
@@ -192,8 +189,7 @@ function PlanCanvas({forme,dims,surf,onDimTap}){
   useEffect(()=>{
     const cv=cvRef.current;if(!cv)return;
     const resize=()=>{cv.width=window.innerWidth;cv.height=window.innerHeight;draw();};
-    resize();
-    window.addEventListener("resize",resize);
+    resize();window.addEventListener("resize",resize);
     return()=>window.removeEventListener("resize",resize);
   },[draw]);
 
@@ -205,7 +201,7 @@ function PlanCanvas({forme,dims,surf,onDimTap}){
     const ts=e=>{
       e.preventDefault();moved=false;
       if(e.touches.length===1){drag.current=true;lastT.current={x:e.touches[0].clientX,y:e.touches[0].clientY};}
-      if(e.touches.length===2){const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;pinch.current=Math.sqrt(dx*dx+dy*dy);}
+      if(e.touches.length===2){const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;pinch.current=Math.hypot(dx,dy);}
     };
     const tm=e=>{
       e.preventDefault();moved=true;
@@ -216,7 +212,7 @@ function PlanCanvas({forme,dims,surf,onDimTap}){
       }
       if(e.touches.length===2&&pinch.current){
         const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
-        const d=Math.sqrt(dx*dx+dy*dy);
+        const d=Math.hypot(dx,dy);
         zoom.current=Math.min(8,Math.max(0.2,zoom.current*(d/pinch.current)));
         pinch.current=d;draw();
       }
@@ -225,11 +221,10 @@ function PlanCanvas({forme,dims,surf,onDimTap}){
       drag.current=false;pinch.current=null;
       if(!moved&&e.changedTouches.length===1){
         const r=cv.getBoundingClientRect();
-        const sx=cv.width/r.width,sy=cv.height/r.height;
-        const tx=(e.changedTouches[0].clientX-r.left)*sx;
-        const ty=(e.changedTouches[0].clientY-r.top)*sy;
+        const tx=(e.changedTouches[0].clientX-r.left)*(cv.width/r.width);
+        const ty=(e.changedTouches[0].clientY-r.top)*(cv.height/r.height);
         hitZones.current.forEach(z=>{
-          if(tx>=z.x&&tx<=z.x+z.w&&ty>=z.y&&ty<=z.y+z.h)onDimTap(z.key);
+          if(tx>=z.x&&tx<=z.x+z.w&&ty>=z.y&&ty<=z.y+z.h)onAreteTap(z);
         });
       }
     };
@@ -237,17 +232,18 @@ function PlanCanvas({forme,dims,surf,onDimTap}){
     cv.addEventListener("touchmove",tm,{passive:false});
     cv.addEventListener("touchend",te);
     return()=>{cv.removeEventListener("touchstart",ts);cv.removeEventListener("touchmove",tm);cv.removeEventListener("touchend",te);};
-  },[draw,onDimTap]);
+  },[draw,onAreteTap]);
 
   return <canvas ref={cvRef} style={{position:"fixed",top:0,left:0,width:"100%",height:"100%",touchAction:"none"}}/>;
 }
 
-function EditModal({value,label,onSave,onClose}){
-  const[v,sv]=useState(String(value));
+function EditModal({arete,onSave,onClose}){
+  const[v,sv]=useState(arete.lbl.replace("m",""));
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
       <div style={{background:"#1c1f2e",borderRadius:16,padding:24,width:"100%",maxWidth:300}}>
-        <p style={{color:"#e8a838",fontWeight:700,fontSize:16,margin:"0 0 16px"}}>✏️ {label}</p>
+        <p style={{color:"#e8a838",fontWeight:700,fontSize:16,margin:"0 0 4px"}}>✏️ Modifier cette arête</p>
+        <p style={{color:"#888",fontSize:12,margin:"0 0 16px"}}>{CHAMPS[arete.forme]?.find(c=>c.k===arete.key)?.l||arete.key}</p>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20}}>
           <button onClick={()=>sv(p=>String(Math.max(0.5,parseFloat(p)-0.5).toFixed(1)))}
             style={{background:"#2a2d3e",border:"1px solid #444",borderRadius:8,color:"#fff",fontSize:22,padding:"6px 14px",cursor:"pointer"}}>−</button>
@@ -258,7 +254,7 @@ function EditModal({value,label,onSave,onClose}){
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{flex:1,padding:12,background:"#2a2d3e",border:"none",borderRadius:10,color:"#aaa",fontWeight:700,cursor:"pointer"}}>Annuler</button>
-          <button onClick={()=>onSave(v)} style={{flex:1,padding:12,background:"#e8a838",border:"none",borderRadius:10,color:"#0f1117",fontWeight:800,cursor:"pointer"}}>✓ OK</button>
+          <button onClick={()=>onSave(arete.key,v)} style={{flex:1,padding:12,background:"#e8a838",border:"none",borderRadius:10,color:"#0f1117",fontWeight:800,cursor:"pointer"}}>✓ OK</button>
         </div>
       </div>
     </div>
@@ -268,12 +264,11 @@ function EditModal({value,label,onSave,onClose}){
 function Plan({data,onR}){
   const[dims,setDims]=useState(data.dims);
   const[editing,setEditing]=useState(null);
-  const ch=CHAMPS[data.id]||[];
   const surf=calcSurf(data.id,dims);
   return(
     <div style={{position:"fixed",inset:0,overflow:"hidden"}}>
-      {editing&&<EditModal value={editing.value} label={editing.label}
-        onSave={v=>{setDims(d=>({...d,[editing.key]:v}));setEditing(null);}}
+      {editing&&<EditModal arete={{...editing,forme:data.id}}
+        onSave={(key,v)=>{setDims(d=>({...d,[key]:v}));setEditing(null);}}
         onClose={()=>setEditing(null)}/>}
       <div style={{position:"fixed",top:0,left:0,right:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"rgba(15,17,23,0.85)",backdropFilter:"blur(8px)"}}>
         <button onClick={onR} style={{background:"none",border:"none",color:"#e8a838",fontSize:15,cursor:"pointer",fontWeight:700}}>← Retour</button>
@@ -281,7 +276,7 @@ function Plan({data,onR}){
         <button style={{background:"#e8a838",border:"none",borderRadius:8,color:"#0f1117",fontWeight:800,fontSize:13,padding:"6px 12px",cursor:"pointer"}}>+ Éléments</button>
       </div>
       <PlanCanvas forme={data.id} dims={dims} surf={surf}
-        onDimTap={key=>{const c=ch.find(x=>x.k===key);if(c)setEditing({key,label:c.l,value:dims[key]||"1"});}}/>
+        onAreteTap={z=>setEditing(z)}/>
     </div>
   );
 }
