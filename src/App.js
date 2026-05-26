@@ -1,92 +1,141 @@
 import{useState,useRef,useEffect,useCallback}from"react";
 const F=[{id:"carre",label:"Carré"},{id:"rectangle",label:"Rectangle"},{id:"triangle",label:"Triangle"},{id:"U",label:"Forme U"},{id:"L",label:"Forme L"}];
 
-const CHAMPS={
+// Définition des arêtes PAR FORME — chacune a son propre key stocké
+const ARETES_DEF={
+  carre:[
+    {id:"top",   label:"Haut",    key:"top",   axe:"h"},
+    {id:"right", label:"Droite",  key:"right", axe:"v"},
+    {id:"bot",   label:"Bas",     key:"bot",   axe:"h"},
+    {id:"left",  label:"Gauche",  key:"left",  axe:"v"},
+  ],
+  rectangle:[
+    {id:"top",   label:"Longueur haut",  key:"top",   axe:"h"},
+    {id:"right", label:"Largeur droite", key:"right", axe:"v"},
+    {id:"bot",   label:"Longueur bas",   key:"bot",   axe:"h"},
+    {id:"left",  label:"Largeur gauche", key:"left",  axe:"v"},
+  ],
+  triangle:[
+    {id:"base",  label:"Base",         key:"base",  axe:"h"},
+    {id:"right", label:"Côté droit",   key:"right", axe:"d"},
+    {id:"left",  label:"Côté gauche",  key:"left",  axe:"d"},
+  ],
+  L:[
+    {id:"top",   label:"Long. haut",    key:"top",   axe:"h"},
+    {id:"r1",    label:"Larg. droite 1",key:"r1",    axe:"v"},
+    {id:"mid",   label:"Retrait",       key:"mid",   axe:"h"},
+    {id:"r2",    label:"Larg. droite 2",key:"r2",    axe:"v"},
+    {id:"bot",   label:"Long. bas",     key:"bot",   axe:"h"},
+    {id:"left",  label:"Hauteur tot.",  key:"left",  axe:"v"},
+  ],
+  U:[
+    {id:"top",   label:"Largeur tot.",  key:"top",   axe:"h"},
+    {id:"rout",  label:"Hauteur droite",key:"rout",  axe:"v"},
+    {id:"br",    label:"Épais. droite", key:"br",    axe:"h"},
+    {id:"rin",   label:"Haut. int. dr.",key:"rin",   axe:"v"},
+    {id:"inner", label:"Larg. intér.",  key:"inner", axe:"h"},
+    {id:"lin",   label:"Haut. int. ga.",key:"lin",   axe:"v"},
+    {id:"bl",    label:"Épais. gauche", key:"bl",    axe:"h"},
+    {id:"lout",  label:"Hauteur gauche",key:"lout",  axe:"v"},
+  ],
+};
+
+// Dims initiales depuis les champs de saisie → convertit en dims par arête
+function initDims(forme,raw){
+  const n=k=>Math.max(0.1,Number(raw[k]||1));
+  if(forme==="carre"){const c=n("cote");return{top:c,right:c,bot:c,left:c};}
+  if(forme==="rectangle"){const w=n("lon"),h=n("lar");return{top:w,right:h,bot:w,left:h};}
+  if(forme==="triangle"){const b=n("base"),h=n("haut");return{base:b,right:h,left:h};}
+  if(forme==="L"){const l1=n("l1"),l2=n("l2"),w1=n("w1"),w2=n("w2");return{top:l1,r1:w1,mid:l1-l2,r2:w2,bot:l2,left:w1+w2};}
+  if(forme==="U"){const lt=n("lt"),ht=n("ht"),ep=n("ep");const iw=Math.max(0.1,lt-2*ep),ih=Math.max(0.1,ht-ep);return{top:lt,rout:ht,br:ep,rin:ih,inner:iw,lin:ih,bl:ep,lout:ht};}
+  return{};
+}
+
+const CHAMPS_INIT={
   carre:[{k:"cote",l:"Côté (m)"}],
   rectangle:[{k:"lon",l:"Longueur"},{k:"lar",l:"Largeur"}],
   triangle:[{k:"base",l:"Base"},{k:"haut",l:"Hauteur"}],
   L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"w1",l:"Larg.1"},{k:"w2",l:"Larg.2"}],
-  U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur"}]
+  U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur"}],
 };
-
-// Chaque arête a un id unique et une key éditable
-function getAretes(f,d,ox,oy,sc){
-  const n=k=>Math.max(0.1,Number(d[k]||1));
-  const m=k=>n(k).toFixed(1).replace(/\.0$/,"")+"m";
-  const ar=[];
-  if(f==="carre"){
-    const s=n("cote")*sc;
-    ar.push({id:"top",   x1:ox,   y1:oy,   x2:ox+s, y2:oy,   lbl:m("cote"),key:"cote"});
-    ar.push({id:"right", x1:ox+s, y1:oy,   x2:ox+s, y2:oy+s, lbl:m("cote"),key:"cote"});
-    ar.push({id:"bot",   x1:ox,   y1:oy+s, x2:ox+s, y2:oy+s, lbl:m("cote"),key:"cote"});
-    ar.push({id:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+s, lbl:m("cote"),key:"cote"});
-  }else if(f==="rectangle"){
-    const w=n("lon")*sc,h=n("lar")*sc;
-    ar.push({id:"top",   x1:ox,   y1:oy,   x2:ox+w, y2:oy,   lbl:m("lon"),key:"lon"});
-    ar.push({id:"right", x1:ox+w, y1:oy,   x2:ox+w, y2:oy+h, lbl:m("lar"),key:"lar"});
-    ar.push({id:"bot",   x1:ox,   y1:oy+h, x2:ox+w, y2:oy+h, lbl:m("lon"),key:"lon"});
-    ar.push({id:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+h, lbl:m("lar"),key:"lar"});
-  }else if(f==="triangle"){
-    const b=n("base")*sc,h=n("haut")*sc;
-    ar.push({id:"base",  x1:ox,     y1:oy+h, x2:ox+b,   y2:oy+h, lbl:m("base"),key:"base"});
-    ar.push({id:"right", x1:ox+b/2, y1:oy,   x2:ox+b,   y2:oy+h, lbl:m("haut"),key:"haut"});
-    ar.push({id:"left",  x1:ox,     y1:oy+h, x2:ox+b/2, y2:oy,   lbl:m("haut"),key:"haut"});
-  }else if(f==="L"){
-    const a=n("l1")*sc,b=n("l2")*sc,c=n("w1")*sc,e=n("w2")*sc;
-    const htot=(n("w1")+n("w2")).toFixed(1).replace(/\.0$/,"")+"m";
-    const diff=Math.abs(n("l1")-n("l2")).toFixed(1).replace(/\.0$/,"")+"m";
-    ar.push({id:"top",    x1:ox,   y1:oy,     x2:ox+a, y2:oy,     lbl:m("l1"), key:"l1"});
-    ar.push({id:"r1",     x1:ox+a, y1:oy,     x2:ox+a, y2:oy+c,   lbl:m("w1"), key:"w1"});
-    ar.push({id:"mid",    x1:ox+b, y1:oy+c,   x2:ox+a, y2:oy+c,   lbl:diff,    key:"l2"});
-    ar.push({id:"r2",     x1:ox+b, y1:oy+c,   x2:ox+b, y2:oy+c+e, lbl:m("w2"), key:"w2"});
-    ar.push({id:"bot",    x1:ox,   y1:oy+c+e, x2:ox+b, y2:oy+c+e, lbl:m("l2"), key:"l2"});
-    ar.push({id:"left",   x1:ox,   y1:oy,     x2:ox,   y2:oy+c+e, lbl:htot,    key:"w1"});
-  }else if(f==="U"){
-    const lt=n("lt"),ht=n("ht"),ep=n("ep");
-    const W=lt*sc,H=ht*sc,E=Math.min(ep*sc,W/2-2,H-2);
-    const iw=Math.max(0,lt-2*ep).toFixed(1).replace(/\.0$/,"")+"m";
-    const ih=Math.max(0,ht-ep).toFixed(1).replace(/\.0$/,"")+"m";
-    const epL=ep.toFixed(1).replace(/\.0$/,"")+"m";
-    ar.push({id:"top",  x1:ox,     y1:oy,   x2:ox+W,   y2:oy,   lbl:m("lt"), key:"lt"});
-    ar.push({id:"r_out",x1:ox+W,   y1:oy,   x2:ox+W,   y2:oy+H, lbl:m("ht"), key:"ht"});
-    ar.push({id:"br",   x1:ox+W-E, y1:oy+H, x2:ox+W,   y2:oy+H, lbl:epL,     key:"ep"});
-    ar.push({id:"r_in", x1:ox+W-E, y1:oy+E, x2:ox+W-E, y2:oy+H, lbl:ih,      key:"ht"});
-    ar.push({id:"inner",x1:ox+E,   y1:oy+E, x2:ox+W-E, y2:oy+E, lbl:iw,      key:"lt"});
-    ar.push({id:"l_in", x1:ox+E,   y1:oy+E, x2:ox+E,   y2:oy+H, lbl:ih,      key:"ht"});
-    ar.push({id:"bl",   x1:ox,     y1:oy+H, x2:ox+E,   y2:oy+H, lbl:epL,     key:"ep"});
-    ar.push({id:"l_out",x1:ox,     y1:oy,   x2:ox,     y2:oy+H, lbl:m("ht"), key:"ht"});
-  }
-  return ar;
-}
 
 function calcSurf(f,d){
   const n=k=>Math.max(0,Number(d[k]||0));
-  if(f==="carre")return(n("cote")**2).toFixed(2);
-  if(f==="rectangle")return(n("lon")*n("lar")).toFixed(2);
-  if(f==="triangle")return((n("base")*n("haut"))/2).toFixed(2);
-  if(f==="L")return(n("l1")*n("w1")+n("l2")*n("w2")).toFixed(2);
-  if(f==="U"){const lt=n("lt"),ht=n("ht"),ep=n("ep");return(lt*ht-Math.max(0,lt-2*ep)*Math.max(0,ht-ep)).toFixed(2);}
+  if(f==="carre")return((n("top")+n("bot"))/2*(n("left")+n("right"))/2).toFixed(2);
+  if(f==="rectangle")return((n("top")+n("bot"))/2*(n("left")+n("right"))/2).toFixed(2);
+  if(f==="triangle")return((n("base")*((n("left")+n("right"))/2))/2).toFixed(2);
+  if(f==="L")return(n("top")*n("r1")+n("bot")*n("r2")).toFixed(2);
+  if(f==="U")return(n("top")*(n("rout"))-(n("inner")*n("rin"))).toFixed(2);
   return"—";
+}
+
+function getPts(f,d,ox,oy){
+  const n=k=>Math.max(0.1,Number(d[k]||1));
+  if(f==="carre"||f==="rectangle"){
+    const w=(n("top")+n("bot"))/2,h=(n("left")+n("right"))/2;
+    return[[ox,oy],[ox+w,oy],[ox+w,oy+h],[ox,oy+h]];
+  }
+  if(f==="triangle"){
+    const b=n("base"),h=(n("left")+n("right"))/2;
+    return[[ox+b/2,oy],[ox+b,oy+h],[ox,oy+h]];
+  }
+  if(f==="L"){
+    const t=n("top"),r1=n("r1"),mid=n("mid"),r2=n("r2"),bot=n("bot");
+    return[[ox,oy],[ox+t,oy],[ox+t,oy+r1],[ox+t-mid,oy+r1],[ox+t-mid,oy+r1+r2],[ox,oy+r1+r2]];
+  }
+  if(f==="U"){
+    const t=n("top"),ro=n("rout"),br=n("br"),iw=n("inner"),ri=n("rin");
+    const ep=(t-iw)/2;
+    return[[ox,oy],[ox+t,oy],[ox+t,oy+ro],[ox+t-ep,oy+ro],[ox+t-ep,oy+ro-ri],[ox+ep,oy+ro-ri],[ox+ep,oy+ro],[ox,oy+ro]];
+  }
+  return[];
 }
 
 function getRealSize(f,d){
   const n=k=>Math.max(0.1,Number(d[k]||1));
-  if(f==="carre")return{w:n("cote"),h:n("cote")};
-  if(f==="rectangle")return{w:n("lon"),h:n("lar")};
-  if(f==="triangle")return{w:n("base"),h:n("haut")};
-  if(f==="L")return{w:Math.max(n("l1"),n("l2")),h:n("w1")+n("w2")};
-  if(f==="U")return{w:n("lt"),h:n("ht")};
+  if(f==="carre"||f==="rectangle")return{w:(n("top")+n("bot"))/2,h:(n("left")+n("right"))/2};
+  if(f==="triangle")return{w:n("base"),h:(n("left")+n("right"))/2};
+  if(f==="L")return{w:n("top"),h:n("r1")+n("r2")};
+  if(f==="U")return{w:n("top"),h:n("rout")};
   return{w:5,h:5};
 }
 
-function getPts(f,d,ox,oy,sc){
-  const n=k=>Math.max(0.1,Number(d[k]||1));
-  if(f==="carre"){const s=n("cote")*sc;return[[ox,oy],[ox+s,oy],[ox+s,oy+s],[ox,oy+s]];}
-  if(f==="rectangle"){const w=n("lon")*sc,h=n("lar")*sc;return[[ox,oy],[ox+w,oy],[ox+w,oy+h],[ox,oy+h]];}
-  if(f==="triangle"){const b=n("base")*sc,h=n("haut")*sc;return[[ox+b/2,oy],[ox+b,oy+h],[ox,oy+h]];}
-  if(f==="L"){const a=n("l1")*sc,b=n("l2")*sc,c=n("w1")*sc,e=n("w2")*sc;return[[ox,oy],[ox+a,oy],[ox+a,oy+c],[ox+b,oy+c],[ox+b,oy+c+e],[ox,oy+c+e]];}
-  if(f==="U"){const W=n("lt")*sc,H=n("ht")*sc,E=Math.min(n("ep")*sc,W/2-2,H-2);return[[ox,oy],[ox+W,oy],[ox+W,oy+H],[ox+W-E,oy+H],[ox+W-E,oy+E],[ox+E,oy+E],[ox+E,oy+H],[ox,oy+H]];}
-  return[];
+function getAretePts(f,d,ox,oy,sc){
+  const n=k=>Math.max(0.1,Number(d[k]||1))*sc;
+  const r=[];
+  if(f==="carre"||f==="rectangle"){
+    const w=(Number(d.top||1)+Number(d.bot||1))/2*sc;
+    const h=(Number(d.left||1)+Number(d.right||1))/2*sc;
+    r.push({key:"top",   x1:ox,   y1:oy,   x2:ox+w, y2:oy});
+    r.push({key:"right", x1:ox+w, y1:oy,   x2:ox+w, y2:oy+h});
+    r.push({key:"bot",   x1:ox,   y1:oy+h, x2:ox+w, y2:oy+h});
+    r.push({key:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+h});
+  }else if(f==="triangle"){
+    const b=n("base"),h=(Number(d.left||1)+Number(d.right||1))/2*sc;
+    r.push({key:"base",  x1:ox,     y1:oy+h, x2:ox+b,   y2:oy+h});
+    r.push({key:"right", x1:ox+b/2, y1:oy,   x2:ox+b,   y2:oy+h});
+    r.push({key:"left",  x1:ox,     y1:oy+h, x2:ox+b/2, y2:oy});
+  }else if(f==="L"){
+    const t=n("top"),r1=n("r1"),mid=n("mid"),r2=n("r2"),bot=n("bot"),left=n("left");
+    r.push({key:"top",  x1:ox,       y1:oy,      x2:ox+t,     y2:oy});
+    r.push({key:"r1",   x1:ox+t,     y1:oy,      x2:ox+t,     y2:oy+r1});
+    r.push({key:"mid",  x1:ox+t-mid, y1:oy+r1,   x2:ox+t,     y2:oy+r1});
+    r.push({key:"r2",   x1:ox+t-mid, y1:oy+r1,   x2:ox+t-mid, y2:oy+r1+r2});
+    r.push({key:"bot",  x1:ox,       y1:oy+r1+r2,x2:ox+t-mid, y2:oy+r1+r2});
+    r.push({key:"left", x1:ox,       y1:oy,      x2:ox,        y2:oy+r1+r2});
+  }else if(f==="U"){
+    const t=n("top"),ro=n("rout"),br=n("br"),iw=n("inner"),ri=n("rin");
+    const ep=(Number(d.top||1)-Number(d.inner||1))/2*sc;
+    r.push({key:"top",   x1:ox,      y1:oy,      x2:ox+t,    y2:oy});
+    r.push({key:"rout",  x1:ox+t,    y1:oy,      x2:ox+t,    y2:oy+ro});
+    r.push({key:"br",    x1:ox+t-ep, y1:oy+ro,   x2:ox+t,    y2:oy+ro});
+    r.push({key:"rin",   x1:ox+t-ep, y1:oy+ro-ri,x2:ox+t-ep, y2:oy+ro});
+    r.push({key:"inner", x1:ox+ep,   y1:oy+ro-ri,x2:ox+t-ep, y2:oy+ro-ri});
+    r.push({key:"lin",   x1:ox+ep,   y1:oy+ro-ri,x2:ox+ep,   y2:oy+ro});
+    r.push({key:"bl",    x1:ox,      y1:oy+ro,   x2:ox+ep,   y2:oy+ro});
+    r.push({key:"lout",  x1:ox,      y1:oy,      x2:ox,      y2:oy+ro});
+  }
+  return r;
 }
 
 function PlanCanvas({forme,dims,surf,onAreteTap}){
@@ -104,7 +153,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     const ctx=cv.getContext("2d");
     ctx.clearRect(0,0,W,H);
     const z=zoom.current,px=pan.current.x,py=pan.current.y;
-    const PAD=75;
+    const PAD=80;
 
     ctx.fillStyle="#f5f0e8";ctx.fillRect(0,0,W,H);
 
@@ -124,7 +173,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     for(let y=goy-gs*5;y<H+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
 
     const ox=planX,oy=planY;
-    const pts=getPts(forme,dims,ox,oy,sc);
+    const pts=getPts(forme,dims,ox,oy);
     if(!pts.length)return;
 
     ctx.shadowColor="rgba(0,0,0,0.1)";ctx.shadowBlur=8;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;
@@ -136,44 +185,39 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
     ctx.closePath();ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
 
-    // Surface au centre
     const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length;
     const cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
     ctx.textAlign="center";ctx.font="bold 14px sans-serif";
-    const st=surf+" m²";
-    const stw=ctx.measureText(st).width+18;
+    const st=surf+" m²";const stw=ctx.measureText(st).width+18;
     ctx.fillStyle="rgba(255,255,255,0.9)";
-    if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);
-    else ctx.rect(cx-stw/2,cy-12,stw,22);
+    if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);else ctx.rect(cx-stw/2,cy-12,stw,22);
     ctx.fill();ctx.fillStyle="#c8820a";ctx.fillText(st,cx,cy+5);
 
-    // Cotes — chaque arête indépendante
     hitZones.current=[];
     ctx.font="bold 11px sans-serif";
-    const aretes=getAretes(forme,dims,ox,oy,sc);
+    const arPts=getAretePts(forme,dims,ox,oy,sc);
+    const defs=ARETES_DEF[forme]||[];
 
-    aretes.forEach(ar=>{
-      const{id,x1,y1,x2,y2,lbl,key}=ar;
+    arPts.forEach(ar=>{
+      const{key,x1,y1,x2,y2}=ar;
       if(Math.hypot(x2-x1,y2-y1)<4)return;
+      const val=Number(dims[key]||1).toFixed(1).replace(/\.0$/,"")+"m";
+      const def=defs.find(d=>d.id===key)||{label:key};
       const mx=(x1+x2)/2,my=(y1+y2)/2;
       const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy)||1;
       const nx=-dy/len,ny=dx/len;
-      const OFF=26;
-      const lx=mx+nx*OFF,ly=my+ny*OFF;
+      const lx=mx+nx*26,ly=my+ny*26;
 
       ctx.setLineDash([4,3]);ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(lx,ly);ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(lx,ly);ctx.stroke();ctx.setLineDash([]);
 
-      const tw=Math.max(ctx.measureText(lbl).width+14,32),th=20;
+      const tw=Math.max(ctx.measureText(val).width+14,32),th=20;
       ctx.fillStyle="#e8f4ff";ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1.5;
       ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);
-      else ctx.rect(lx-tw/2,ly-th/2,tw,th);
+      if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);else ctx.rect(lx-tw/2,ly-th/2,tw,th);
       ctx.fill();ctx.stroke();
-      ctx.fillStyle="#1a5fa8";ctx.textAlign="center";ctx.fillText(lbl,lx,ly+4);
-      // id unique pour chaque arête
-      hitZones.current.push({id,key,lbl,x:lx-tw/2,y:ly-th/2,w:tw,h:th});
+      ctx.fillStyle="#1a5fa8";ctx.textAlign="center";ctx.fillText(val,lx,ly+4);
+      hitZones.current.push({key,label:def.label,val:dims[key]||"1",x:lx-tw/2,y:ly-th/2,w:tw,h:th});
     });
 
     ctx.textAlign="left";
@@ -192,19 +236,16 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     resize();window.addEventListener("resize",resize);
     return()=>window.removeEventListener("resize",resize);
   },[draw]);
-
   useEffect(()=>{draw();},[draw]);
 
   useEffect(()=>{
     const cv=cvRef.current;if(!cv)return;
     let moved=false;
-    const ts=e=>{
-      e.preventDefault();moved=false;
+    const ts=e=>{e.preventDefault();moved=false;
       if(e.touches.length===1){drag.current=true;lastT.current={x:e.touches[0].clientX,y:e.touches[0].clientY};}
       if(e.touches.length===2){const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;pinch.current=Math.hypot(dx,dy);}
     };
-    const tm=e=>{
-      e.preventDefault();moved=true;
+    const tm=e=>{e.preventDefault();moved=true;
       if(e.touches.length===1&&drag.current&&lastT.current){
         pan.current.x+=e.touches[0].clientX-lastT.current.x;
         pan.current.y+=e.touches[0].clientY-lastT.current.y;
@@ -217,8 +258,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
         pinch.current=d;draw();
       }
     };
-    const te=e=>{
-      drag.current=false;pinch.current=null;
+    const te=e=>{drag.current=false;pinch.current=null;
       if(!moved&&e.changedTouches.length===1){
         const r=cv.getBoundingClientRect();
         const tx=(e.changedTouches[0].clientX-r.left)*(cv.width/r.width);
@@ -237,24 +277,23 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
   return <canvas ref={cvRef} style={{position:"fixed",top:0,left:0,width:"100%",height:"100%",touchAction:"none"}}/>;
 }
 
-function EditModal({arete,onSave,onClose}){
-  const[v,sv]=useState(arete.lbl.replace("m",""));
+function EditModal({item,onSave,onClose}){
+  const[v,sv]=useState(String(Number(item.val).toFixed(1)));
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
       <div style={{background:"#1c1f2e",borderRadius:16,padding:24,width:"100%",maxWidth:300}}>
-        <p style={{color:"#e8a838",fontWeight:700,fontSize:16,margin:"0 0 4px"}}>✏️ Modifier cette arête</p>
-        <p style={{color:"#888",fontSize:12,margin:"0 0 16px"}}>{CHAMPS[arete.forme]?.find(c=>c.k===arete.key)?.l||arete.key}</p>
+        <p style={{color:"#e8a838",fontWeight:700,fontSize:16,margin:"0 0 4px"}}>✏️ {item.label}</p>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20}}>
-          <button onClick={()=>sv(p=>String(Math.max(0.5,parseFloat(p)-0.5).toFixed(1)))}
+          <button onClick={()=>sv(p=>String(Math.max(0.1,parseFloat(p)-0.5).toFixed(1)))}
             style={{background:"#2a2d3e",border:"1px solid #444",borderRadius:8,color:"#fff",fontSize:22,padding:"6px 14px",cursor:"pointer"}}>−</button>
-          <input type="number" value={v} min="0.5" step="0.5" onChange={e=>sv(e.target.value)}
+          <input type="number" value={v} min="0.1" step="0.5" onChange={e=>sv(e.target.value)}
             style={{flex:1,background:"#12151f",border:"2px solid #e8a838",borderRadius:8,color:"#fff",fontSize:24,padding:"8px",textAlign:"center"}}/>
           <button onClick={()=>sv(p=>String((parseFloat(p)+0.5).toFixed(1)))}
             style={{background:"#2a2d3e",border:"1px solid #444",borderRadius:8,color:"#fff",fontSize:22,padding:"6px 14px",cursor:"pointer"}}>＋</button>
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{flex:1,padding:12,background:"#2a2d3e",border:"none",borderRadius:10,color:"#aaa",fontWeight:700,cursor:"pointer"}}>Annuler</button>
-          <button onClick={()=>onSave(arete.key,v)} style={{flex:1,padding:12,background:"#e8a838",border:"none",borderRadius:10,color:"#0f1117",fontWeight:800,cursor:"pointer"}}>✓ OK</button>
+          <button onClick={()=>onSave(item.key,v)} style={{flex:1,padding:12,background:"#e8a838",border:"none",borderRadius:10,color:"#0f1117",fontWeight:800,cursor:"pointer"}}>✓ OK</button>
         </div>
       </div>
     </div>
@@ -267,7 +306,7 @@ function Plan({data,onR}){
   const surf=calcSurf(data.id,dims);
   return(
     <div style={{position:"fixed",inset:0,overflow:"hidden"}}>
-      {editing&&<EditModal arete={{...editing,forme:data.id}}
+      {editing&&<EditModal item={editing}
         onSave={(key,v)=>{setDims(d=>({...d,[key]:v}));setEditing(null);}}
         onClose={()=>setEditing(null)}/>}
       <div style={{position:"fixed",top:0,left:0,right:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"rgba(15,17,23,0.85)",backdropFilter:"blur(8px)"}}>
@@ -275,14 +314,13 @@ function Plan({data,onR}){
         <span style={{color:"#fff",fontWeight:700,fontSize:15}}>{data.label}</span>
         <button style={{background:"#e8a838",border:"none",borderRadius:8,color:"#0f1117",fontWeight:800,fontSize:13,padding:"6px 12px",cursor:"pointer"}}>+ Éléments</button>
       </div>
-      <PlanCanvas forme={data.id} dims={dims} surf={surf}
-        onAreteTap={z=>setEditing(z)}/>
+      <PlanCanvas forme={data.id} dims={dims} surf={surf} onAreteTap={setEditing}/>
     </div>
   );
 }
 
 function Dims({f,onV,onR}){
-  const ch=CHAMPS[f.id]||[];const[d,sd]=useState({});
+  const ch=CHAMPS_INIT[f.id]||[];const[d,sd]=useState({});
   const ok=ch.every(c=>d[c.k]&&Number(d[c.k])>0);
   return(
     <div style={S.screen}>
@@ -296,7 +334,7 @@ function Dims({f,onV,onR}){
             onChange={e=>sd(p=>({...p,[c.k]:e.target.value}))} style={S.inp}/>
         </div>)}
       </div>
-      <button onClick={()=>ok&&onV({...f,dims:d})} style={{...S.cta,opacity:ok?1:0.4}} disabled={!ok}>Créer le plan →</button>
+      <button onClick={()=>ok&&onV({...f,dims:initDims(f.id,d)})} style={{...S.cta,opacity:ok?1:0.4}} disabled={!ok}>Créer le plan →</button>
     </div>
   );
 }
