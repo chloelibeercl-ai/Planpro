@@ -1,142 +1,123 @@
 import{useState,useRef,useEffect,useCallback}from"react";
-const F=[{id:"libre",label:"Forme libre"},{id:"U",label:"Forme U"},{id:"L",label:"Forme L"},{id:"triangle",label:"Triangle"}];
 
-const CHAMPS_INIT={
-  libre:[{k:"top",l:"Mur haut (m)"},{k:"right",l:"Mur droit (m)"},{k:"bot",l:"Mur bas (m)"},{k:"left",l:"Mur gauche (m)"}],
-  triangle:[{k:"base",l:"Base (m)"},{k:"right",l:"Côté droit (m)"},{k:"left",l:"Côté gauche (m)"}],
-  L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"w1",l:"Larg.1"},{k:"w2",l:"Larg.2"}],
-  U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep",l:"Épaisseur murs"}],
-};
+// =============================================
+// FORMES : définies par leurs points en mètres
+// Chaque forme retourne {points, aretes}
+// points = [{x,y}] coordonnées réelles en mètres
+// aretes = [{p1, p2, key, label}] relient 2 points
+// =============================================
 
-// Chaque arête du U a sa propre clé unique
-const LABELS={
-  top:"Mur haut",right:"Mur droit",bot:"Mur bas",left:"Mur gauche",
-  base:"Base",
-  r1:"Larg.dr.1",mid:"Retrait",r2:"Larg.dr.2",
-  u_top:"Larg. haut ext",
-  u_rout:"Haut. dr. ext",
-  u_br:"Épais. bas dr.",
-  u_rin:"Haut. int. dr.",
-  u_inner:"Larg. int.",
-  u_lin:"Haut. int. ga.",
-  u_bl:"Épais. bas ga.",
-  u_lout:"Haut. ga. ext",
-};
-
-function nv(d,k){return Math.max(0.1,Number(d[k]||1));}
-
-function initDims(f,r){
-  const g=k=>Math.max(0.1,Number(r[k]||1));
-  if(f==="libre")return{top:g("top"),right:g("right"),bot:g("bot"),left:g("left")};
-  if(f==="triangle")return{base:g("base"),right:g("right"),left:g("left")};
-  if(f==="L"){const l1=g("l1"),l2=g("l2"),w1=g("w1"),w2=g("w2");
-    return{top:l1,r1:w1,mid:Math.max(0.1,l1-l2),r2:w2,bot:l2,left:w1+w2};}
-  if(f==="U"){
-    const lt=g("lt"),ht=g("ht"),ep=g("ep");
-    const inner=Math.max(0.1,lt-2*ep);
-    const ih=Math.max(0.1,ht-ep);
-    // Chaque arête a sa propre clé unique u_xxx
-    return{u_top:lt,u_rout:ht,u_br:ep,u_rin:ih,u_inner:inner,u_lin:ih,u_bl:ep,u_lout:ht};
-  }
-  return{};
-}
-
-function getRealSize(f,d){
-  if(f==="libre")return{w:Math.max(nv(d,"top"),nv(d,"bot")),h:Math.max(nv(d,"left"),nv(d,"right"))};
-  if(f==="triangle")return{w:nv(d,"base"),h:Math.max(nv(d,"left"),nv(d,"right"))};
-  if(f==="L")return{w:nv(d,"top"),h:nv(d,"r1")+nv(d,"r2")};
-  if(f==="U"){
-    const ep=(nv(d,"u_top")-nv(d,"u_inner"))/2;
-    return{w:nv(d,"u_top"),h:nv(d,"u_rout")};
-  }
-  return{w:5,h:5};
-}
-
-function getPts(f,d,ox,oy,sc){
-  const s=k=>nv(d,k)*sc;
-  if(f==="libre"){
-    const t=s("top"),b=s("bot"),l=s("left"),r=s("right");
-    return[[ox,oy],[ox+t,oy],[ox+b,oy+r],[ox,oy+l]];
+function buildForme(f,d){
+  const n=k=>Math.max(0.1,Number(d[k]||1));
+  if(f==="rectangle"){
+    const w=n("w"),h=n("h");
+    const pts=[{x:0,y:0},{x:w,y:0},{x:w,y:h},{x:0,y:h}];
+    return{pts,aretes:[
+      {p1:0,p2:1,key:"w_top",  label:"Haut"},
+      {p1:1,p2:2,key:"h_right",label:"Droite"},
+      {p1:3,p2:2,key:"w_bot",  label:"Bas"},
+      {p1:0,p2:3,key:"h_left", label:"Gauche"},
+    ]};
   }
   if(f==="triangle"){
-    const b=s("base"),h=Math.max(nv(d,"left"),nv(d,"right"))*sc;
-    return[[ox+b/2,oy],[ox+b,oy+h],[ox,oy+h]];
+    const b=n("base"),h=n("haut"),dec=n("decalage");
+    const pts=[{x:0,y:h},{x:b,y:h},{x:dec,y:0}];
+    return{pts,aretes:[
+      {p1:0,p2:1,key:"base",  label:"Base"},
+      {p1:1,p2:2,key:"cote_r",label:"Côté dr."},
+      {p1:0,p2:2,key:"cote_l",label:"Côté ga."},
+    ]};
   }
   if(f==="L"){
-    const t=s("top"),r1=s("r1"),mid=s("mid"),r2=s("r2");
-    return[[ox,oy],[ox+t,oy],[ox+t,oy+r1],[ox+t-mid,oy+r1],[ox+t-mid,oy+r1+r2],[ox,oy+r1+r2]];
+    const l1=n("l1"),l2=n("l2"),h1=n("h1"),h2=n("h2");
+    const pts=[
+      {x:0,  y:0},
+      {x:l1, y:0},
+      {x:l1, y:h1},
+      {x:l2, y:h1},
+      {x:l2, y:h1+h2},
+      {x:0,  y:h1+h2},
+    ];
+    return{pts,aretes:[
+      {p1:0,p2:1,key:"l1",   label:"Long.1"},
+      {p1:1,p2:2,key:"h1",   label:"Haut.1"},
+      {p1:2,p2:3,key:"ret",  label:"Retrait"},
+      {p1:3,p2:4,key:"h2",   label:"Haut.2"},
+      {p1:4,p2:5,key:"l2",   label:"Long.2"},
+      {p1:5,p2:0,key:"htot", label:"Haut.tot"},
+    ]};
   }
   if(f==="U"){
-    const W=s("u_top"),H=s("u_rout");
-    // Calcule l'épaisseur à partir de u_inner
-    const E=Math.max(2,(W-s("u_inner"))/2);
-    return[
-      [ox,    oy],
-      [ox+W,  oy],
-      [ox+W,  oy+H],
-      [ox+W-E,oy+H],
-      [ox+W-E,oy+s("u_rin")],
-      [ox+E,  oy+s("u_lin")],
-      [ox+E,  oy+H],
-      [ox,    oy+H],
+    const lt=n("lt"),ht=n("ht"),ep_g=n("ep_g"),ep_d=n("ep_d"),ep_h=n("ep_h");
+    const iw=Math.max(0.1,lt-ep_g-ep_d);
+    const ih=Math.max(0.1,ht-ep_h);
+    const pts=[
+      {x:0,    y:0},
+      {x:lt,   y:0},
+      {x:lt,   y:ht},
+      {x:lt-ep_d, y:ht},
+      {x:lt-ep_d, y:ep_h},
+      {x:ep_g, y:ep_h},
+      {x:ep_g, y:ht},
+      {x:0,    y:ht},
     ];
+    return{pts,aretes:[
+      {p1:0,p2:1,key:"lt",   label:"Larg.ext"},
+      {p1:1,p2:2,key:"ht",   label:"Haut.dr.ext"},
+      {p1:2,p2:3,key:"ep_d", label:"Épais.dr."},
+      {p1:3,p2:4,key:"ih",   label:"Haut.int.dr."},
+      {p1:4,p2:5,key:"iw",   label:"Larg.int."},
+      {p1:5,p2:6,key:"ih2",  label:"Haut.int.ga."},
+      {p1:6,p2:7,key:"ep_g", label:"Épais.ga."},
+      {p1:7,p2:0,key:"ht2",  label:"Haut.ga.ext"},
+    ]};
   }
-  return[];
+  return{pts:[],aretes:[]};
 }
 
-function getAretePts(f,d,ox,oy,sc){
-  const s=k=>nv(d,k)*sc;
-  const ar=[];
-  if(f==="libre"){
-    const t=s("top"),b=s("bot"),l=s("left"),r=s("right");
-    ar.push({key:"top",   x1:ox,   y1:oy,   x2:ox+t, y2:oy});
-    ar.push({key:"right", x1:ox+t, y1:oy,   x2:ox+b, y2:oy+r});
-    ar.push({key:"bot",   x1:ox,   y1:oy+l, x2:ox+b, y2:oy+r});
-    ar.push({key:"left",  x1:ox,   y1:oy,   x2:ox,   y2:oy+l});
-  }else if(f==="triangle"){
-    const b=s("base"),h=Math.max(nv(d,"left"),nv(d,"right"))*sc;
-    ar.push({key:"base",  x1:ox,     y1:oy+h, x2:ox+b,   y2:oy+h});
-    ar.push({key:"right", x1:ox+b/2, y1:oy,   x2:ox+b,   y2:oy+h});
-    ar.push({key:"left",  x1:ox,     y1:oy+h, x2:ox+b/2, y2:oy});
-  }else if(f==="L"){
-    const t=s("top"),r1=s("r1"),mid=s("mid"),r2=s("r2"),bot=s("bot");
-    ar.push({key:"top",  x1:ox,       y1:oy,       x2:ox+t,     y2:oy});
-    ar.push({key:"r1",   x1:ox+t,     y1:oy,       x2:ox+t,     y2:oy+r1});
-    ar.push({key:"mid",  x1:ox+t-mid, y1:oy+r1,    x2:ox+t,     y2:oy+r1});
-    ar.push({key:"r2",   x1:ox+t-mid, y1:oy+r1,    x2:ox+t-mid, y2:oy+r1+r2});
-    ar.push({key:"bot",  x1:ox,       y1:oy+r1+r2, x2:ox+t-mid, y2:oy+r1+r2});
-    ar.push({key:"left", x1:ox,       y1:oy,       x2:ox,        y2:oy+r1+r2});
-  }else if(f==="U"){
-    // Chaque arête = clé unique u_xxx
-    const W=s("u_top"),H=s("u_rout"),E=Math.max(2,(W-s("u_inner"))/2);
-    const ri=s("u_rin"),li=s("u_lin");
-    ar.push({key:"u_top",   x1:ox,    y1:oy,    x2:ox+W,   y2:oy});
-    ar.push({key:"u_rout",  x1:ox+W,  y1:oy,    x2:ox+W,   y2:oy+H});
-    ar.push({key:"u_br",    x1:ox+W-E,y1:oy+H,  x2:ox+W,   y2:oy+H});
-    ar.push({key:"u_rin",   x1:ox+W-E,y1:oy+ri, x2:ox+W-E, y2:oy+H});
-    ar.push({key:"u_inner", x1:ox+E,  y1:oy+li, x2:ox+W-E, y2:oy+ri});
-    ar.push({key:"u_lin",   x1:ox+E,  y1:oy+li, x2:ox+E,   y2:oy+H});
-    ar.push({key:"u_bl",    x1:ox,    y1:oy+H,  x2:ox+E,   y2:oy+H});
-    ar.push({key:"u_lout",  x1:ox,    y1:oy,    x2:ox,     y2:oy+H});
+// Clés éditables pour chaque arête
+function getKeyValue(f,d,key){
+  const n=k=>Math.max(0.1,Number(d[k]||1));
+  if(f==="U"){
+    if(key==="lt")return{k:"lt",v:n("lt")};
+    if(key==="ht"||key==="ht2")return{k:"ht",v:n("ht")};
+    if(key==="ep_d")return{k:"ep_d",v:n("ep_d")};
+    if(key==="ep_g")return{k:"ep_g",v:n("ep_g")};
+    if(key==="ep_h")return{k:"ep_h",v:n("ep_h")};
+    if(key==="ih"||key==="ih2")return{k:"ht",v:n("ht")-n("ep_h")};
+    if(key==="iw")return{k:"lt",v:n("lt")-n("ep_g")-n("ep_d")};
   }
-  return ar;
+  if(key==="ret")return{k:"l1",v:n("l1")-n("l2")};
+  if(key==="htot")return{k:"h1",v:n("h1")+n("h2")};
+  return{k:key,v:n(key)};
 }
+
+const CHAMPS_INIT={
+  rectangle:[{k:"w",l:"Largeur (m)"},{k:"h",l:"Hauteur (m)"}],
+  triangle:[{k:"base",l:"Base (m)"},{k:"haut",l:"Hauteur (m)"},{k:"decalage",l:"Décalage sommet (m)"}],
+  L:[{k:"l1",l:"Long.1"},{k:"l2",l:"Long.2"},{k:"h1",l:"Haut.1"},{k:"h2",l:"Haut.2"}],
+  U:[{k:"lt",l:"Larg.totale"},{k:"ht",l:"Haut.totale"},{k:"ep_g",l:"Épais.gauche"},{k:"ep_d",l:"Épais.droite"},{k:"ep_h",l:"Épais.haut"}],
+};
+
+const FORMES=[
+  {id:"rectangle",label:"Rectangle"},
+  {id:"triangle",label:"Triangle"},
+  {id:"L",label:"Forme L"},
+  {id:"U",label:"Forme U"},
+];
 
 function calcSurf(f,d){
-  if(f==="libre"){
-    const t=nv(d,"top"),b=nv(d,"bot"),l=nv(d,"left"),r=nv(d,"right");
-    const pts=[[0,0],[t,0],[b,r],[0,l]];
-    let a=0;for(let i=0;i<pts.length;i++){const j=(i+1)%pts.length;a+=pts[i][0]*pts[j][1]-pts[j][0]*pts[i][1];}
-    return Math.abs(a/2).toFixed(2);
+  const{pts}=buildForme(f,d);
+  if(!pts.length)return"—";
+  let a=0;
+  for(let i=0;i<pts.length;i++){
+    const j=(i+1)%pts.length;
+    a+=pts[i].x*pts[j].y-pts[j].x*pts[i].y;
   }
-  if(f==="triangle")return((nv(d,"base")*Math.max(nv(d,"left"),nv(d,"right")))/2).toFixed(2);
-  if(f==="L")return(nv(d,"top")*nv(d,"r1")+nv(d,"bot")*nv(d,"r2")).toFixed(2);
-  if(f==="U"){
-    const W=nv(d,"u_top"),H=nv(d,"u_rout"),iw=nv(d,"u_inner"),ih=Math.max(nv(d,"u_rin"),nv(d,"u_lin"));
-    return Math.max(0,W*H-iw*ih).toFixed(2);
-  }
-  return"—";
+  return Math.abs(a/2).toFixed(2);
 }
+
+function dist(p1,p2){return Math.hypot(p2.x-p1.x,p2.y-p1.y);}
 
 function PlanCanvas({forme,dims,surf,onAreteTap}){
   const cvRef=useRef();
@@ -149,69 +130,106 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
 
   const draw=useCallback(()=>{
     const cv=cvRef.current;if(!cv)return;
-    const W=cv.width,H=cv.height;
+    const CW=cv.width,CH=cv.height;
     const ctx=cv.getContext("2d");
-    ctx.clearRect(0,0,W,H);
+    ctx.clearRect(0,0,CW,CH);
     const z=zoom.current,px=pan.current.x,py=pan.current.y;
     const PAD=80;
-    ctx.fillStyle="#f5f0e8";ctx.fillRect(0,0,W,H);
-    const gs=40*z;
-    const rs=getRealSize(forme,dims);
-    const sc0=Math.min((W-PAD*2)/rs.w,(H-PAD*2)/rs.h);
-    const sc=sc0*z;
-    const planX=W/2-rs.w*sc/2+px,planY=H/2-rs.h*sc/2+py;
-    const gox=((planX%gs)+gs)%gs,goy=((planY%gs)+gs)%gs;
-    ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
-    for(let x=gox-gs;x<W+gs;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-    for(let y=goy-gs;y<H+gs;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-    ctx.strokeStyle="#ccc8bc";ctx.lineWidth=1.2;
-    for(let x=gox-gs*5;x<W+gs*5;x+=gs*5){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-    for(let y=goy-gs*5;y<H+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-    const ox=planX,oy=planY;
-    const pts=getPts(forme,dims,ox,oy,sc);
+
+    ctx.fillStyle="#f5f0e8";ctx.fillRect(0,0,CW,CH);
+
+    const{pts,aretes}=buildForme(forme,dims);
     if(!pts.length)return;
+
+    // Bounding box réelle
+    const minX=Math.min(...pts.map(p=>p.x));
+    const maxX=Math.max(...pts.map(p=>p.x));
+    const minY=Math.min(...pts.map(p=>p.y));
+    const maxY=Math.max(...pts.map(p=>p.y));
+    const rw=maxX-minX,rh=maxY-minY;
+    const sc0=Math.min((CW-PAD*2)/rw,(CH-PAD*2)/rh);
+    const sc=sc0*z;
+
+    // Origine : centre de l'écran
+    const originX=CW/2-rw*sc/2+px;
+    const originY=CH/2-rh*sc/2+py;
+
+    // Convertit un point réel → pixel
+    const toScreen=p=>({
+      x:originX+(p.x-minX)*sc,
+      y:originY+(p.y-minY)*sc,
+    });
+
+    // Grille solidaire
+    const gs=sc; // 1 carreau = 1 mètre
+    const gox=((originX%gs)+gs)%gs;
+    const goy=((originY%gs)+gs)%gs;
+    ctx.strokeStyle="#e0dbd0";ctx.lineWidth=0.8;
+    for(let x=gox-gs;x<CW+gs;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
+    for(let y=goy-gs;y<CH+gs;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
+    ctx.strokeStyle="#ccc8bc";ctx.lineWidth=1.2;
+    for(let x=gox-gs*5;x<CW+gs*5;x+=gs*5){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
+    for(let y=goy-gs*5;y<CH+gs*5;y+=gs*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
+
+    // Pièce
+    const sPts=pts.map(toScreen);
     ctx.shadowColor="rgba(0,0,0,0.1)";ctx.shadowBlur=8;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;
-    ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
-    pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
+    ctx.beginPath();ctx.moveTo(sPts[0].x,sPts[0].y);
+    sPts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
     ctx.closePath();ctx.fillStyle="rgba(255,252,235,0.97)";ctx.fill();
     ctx.shadowColor="transparent";ctx.shadowBlur=0;
-    ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
-    pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
+    ctx.beginPath();ctx.moveTo(sPts[0].x,sPts[0].y);
+    sPts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
     ctx.closePath();ctx.strokeStyle="#c8820a";ctx.lineWidth=3;ctx.setLineDash([]);ctx.stroke();
-    const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length;
-    const cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
+
+    // Surface au centre
+    const cx=sPts.reduce((s,p)=>s+p.x,0)/sPts.length;
+    const cy=sPts.reduce((s,p)=>s+p.y,0)/sPts.length;
     ctx.textAlign="center";ctx.font="bold 14px sans-serif";
     const st=surf+" m²";const stw=ctx.measureText(st).width+18;
     ctx.fillStyle="rgba(255,255,255,0.92)";
-    if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);else ctx.rect(cx-stw/2,cy-12,stw,22);
+    if(ctx.roundRect)ctx.roundRect(cx-stw/2,cy-12,stw,22,5);
+    else ctx.rect(cx-stw/2,cy-12,stw,22);
     ctx.fill();ctx.fillStyle="#c8820a";ctx.fillText(st,cx,cy+5);
+
+    // Cotes sur chaque arête
     hitZones.current=[];
     ctx.font="bold 11px sans-serif";
-    getAretePts(forme,dims,ox,oy,sc).forEach(ar=>{
-      const{key,x1,y1,x2,y2}=ar;
-      if(Math.hypot(x2-x1,y2-y1)<4)return;
-      const val=Number(dims[key]||1).toFixed(1).replace(/\.0$/,"")+"m";
-      const mx=(x1+x2)/2,my=(y1+y2)/2;
-      const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy)||1;
-      const lx=mx+(-dy/len)*28,ly=my+(dx/len)*28;
+    aretes.forEach(ar=>{
+      const A=sPts[ar.p1],B=sPts[ar.p2];
+      const mx=(A.x+B.x)/2,my=(A.y+B.y)/2;
+      const ddx=B.x-A.x,ddy=B.y-A.y,len=Math.hypot(ddx,ddy)||1;
+      // Normale vers l'extérieur
+      const nx=-ddy/len,ny=ddx/len;
+      const OFF=28;
+      const lx=mx+nx*OFF,ly=my+ny*OFF;
+
+      // Valeur réelle = distance entre les 2 points en mètres
+      const realDist=dist(pts[ar.p1],pts[ar.p2]).toFixed(2).replace(/\.00$/,"").replace(/(\.\d)0$/,"$1");
+      const val=realDist+"m";
+
       ctx.setLineDash([4,3]);ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(lx,ly);ctx.stroke();ctx.setLineDash([]);
       const tw=Math.max(ctx.measureText(val).width+14,36),th=20;
       ctx.fillStyle="#e8f4ff";ctx.strokeStyle="#2a7fd4";ctx.lineWidth=1.5;
       ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);else ctx.rect(lx-tw/2,ly-th/2,tw,th);
+      if(ctx.roundRect)ctx.roundRect(lx-tw/2,ly-th/2,tw,th,4);
+      else ctx.rect(lx-tw/2,ly-th/2,tw,th);
       ctx.fill();ctx.stroke();
       ctx.fillStyle="#1a5fa8";ctx.textAlign="center";ctx.fillText(val,lx,ly+4);
-      hitZones.current.push({key,label:LABELS[key]||key,val:String(dims[key]||1),x:lx-tw/2,y:ly-th/2,w:tw,h:th});
+
+      const kv=getKeyValue(forme,dims,ar.key);
+      hitZones.current.push({key:kv.k,label:ar.label,val:String(kv.v),x:lx-tw/2,y:ly-th/2,w:tw,h:th});
     });
+
     ctx.textAlign="left";
-    const bLen=sc*2;
+    // Échelle = 1 carreau = 1m
     ctx.strokeStyle="#999";ctx.lineWidth=1.5;ctx.setLineDash([]);
-    ctx.beginPath();ctx.moveTo(12,H-16);ctx.lineTo(12+bLen,H-16);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(12,H-22);ctx.lineTo(12,H-10);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(12+bLen,H-22);ctx.lineTo(12+bLen,H-10);ctx.stroke();
-    ctx.fillStyle="#999";ctx.font="11px sans-serif";ctx.fillText("2m",12+bLen/2-8,H-20);
-    ctx.fillStyle="#b06010";ctx.font="bold 13px sans-serif";ctx.fillText("N↑",W-30,22);
+    ctx.beginPath();ctx.moveTo(12,CH-16);ctx.lineTo(12+sc,CH-16);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(12,CH-22);ctx.lineTo(12,CH-10);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(12+sc,CH-22);ctx.lineTo(12+sc,CH-10);ctx.stroke();
+    ctx.fillStyle="#999";ctx.font="11px sans-serif";ctx.fillText("1m",12+sc/2-6,CH-20);
+    ctx.fillStyle="#b06010";ctx.font="bold 13px sans-serif";ctx.fillText("N↑",CW-30,22);
   },[forme,dims,surf]);
 
   useEffect(()=>{
@@ -221,6 +239,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
     return()=>window.removeEventListener("resize",resize);
   },[draw]);
   useEffect(()=>{draw();},[draw]);
+
   useEffect(()=>{
     const cv=cvRef.current;if(!cv)return;
     let moved=false;
@@ -237,7 +256,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
       if(e.touches.length===2&&pinch.current){
         const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
         const d=Math.hypot(dx,dy);
-        zoom.current=Math.min(8,Math.max(0.2,zoom.current*(d/pinch.current)));
+        zoom.current=Math.min(10,Math.max(0.1,zoom.current*(d/pinch.current)));
         pinch.current=d;draw();
       }
     };
@@ -261,7 +280,7 @@ function PlanCanvas({forme,dims,surf,onAreteTap}){
 }
 
 function EditModal({item,onSave,onClose}){
-  const[v,sv]=useState(String(Number(item.val).toFixed(1)));
+  const[v,sv]=useState(String(Number(item.val).toFixed(2).replace(/\.00$/,"").replace(/(\.\d)0$/,"$1")));
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}}>
       <div style={{background:"#1c1f2e",borderRadius:16,padding:24,width:"100%",maxWidth:300}}>
@@ -269,7 +288,7 @@ function EditModal({item,onSave,onClose}){
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20}}>
           <button onClick={()=>sv(p=>String(Math.max(0.1,parseFloat(p)-0.5).toFixed(1)))}
             style={{background:"#2a2d3e",border:"1px solid #444",borderRadius:8,color:"#fff",fontSize:22,padding:"6px 14px",cursor:"pointer"}}>−</button>
-          <input type="number" value={v} min="0.1" step="0.5" onChange={e=>sv(e.target.value)}
+          <input type="number" value={v} min="0.1" step="0.1" onChange={e=>sv(e.target.value)}
             style={{flex:1,background:"#12151f",border:"2px solid #e8a838",borderRadius:8,color:"#fff",fontSize:24,padding:"8px",textAlign:"center"}}/>
           <button onClick={()=>sv(p=>String((parseFloat(p)+0.5).toFixed(1)))}
             style={{background:"#2a2d3e",border:"1px solid #444",borderRadius:8,color:"#fff",fontSize:22,padding:"6px 14px",cursor:"pointer"}}>＋</button>
@@ -313,11 +332,11 @@ function Dims({f,onV,onR}){
       <div style={{marginTop:16}}>
         {ch.map(c=><div key={c.k} style={{marginBottom:12}}>
           <label style={S.lbl}>{c.l}</label>
-          <input type="number" min="0.5" step="0.5" placeholder="ex: 4"
+          <input type="number" min="0.1" step="0.5" placeholder="ex: 4"
             onChange={e=>sd(p=>({...p,[c.k]:e.target.value}))} style={S.inp}/>
         </div>)}
       </div>
-      <button onClick={()=>ok&&onV({...f,dims:initDims(f.id,d)})} style={{...S.cta,opacity:ok?1:0.4}} disabled={!ok}>Créer le plan →</button>
+      <button onClick={()=>ok&&onV({...f,dims:d})} style={{...S.cta,opacity:ok?1:0.4}} disabled={!ok}>Créer le plan →</button>
     </div>
   );
 }
@@ -331,7 +350,7 @@ export default function App(){
       <h1 style={{textAlign:"center",color:"#e8a838",fontSize:26,marginBottom:4}}>📐 PlanPro</h1>
       <p style={S.sub}>Choisissez la forme de la pièce</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:20}}>
-        {F.map(x=><button key={x.id} onClick={()=>{sf(x);se("dims")}} style={S.card2}>
+        {FORMES.map(x=><button key={x.id} onClick={()=>{sf(x);se("dims")}} style={S.card2}>
           <div style={{fontWeight:700,fontSize:18}}>{x.label}</div>
         </button>)}
       </div>
